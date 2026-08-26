@@ -1,6 +1,14 @@
+"""Biblioteca — todavia responde JSON.
+
+En este paso solo cambia el dominio: Person deja lugar a Autor y Libro,
+con una relacion uno-a-muchos. Las rutas siguen hablando JSON; en el
+paso siguiente empiezan a devolver HTML.
+"""
 import os
+
 from flask import Flask, jsonify, abort, request
-from flask_sqlalchemy import SQLAlchemy
+
+from models import db, Autor, Libro
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
@@ -9,64 +17,58 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app)
+db.init_app(app)
 
 
-class Person(db.Model):
-    __tablename__ = 'persons'
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), nullable=False, unique=True)
-    age = db.Column(db.Integer, db.CheckConstraint('age >= 0'))
-    email = db.Column(db.String(120))
-
-    def __repr__(self):
-        return f'<Person id={self.id} name={self.name}>'
-
-    def format(self):
-        """Convierte el objeto Python en un diccionario serializable a JSON."""
-        return {
-            'name': self.name,
-            'age': self.age,
-            'email': self.email,
-        }
-
-
-@app.route('/personas', methods=['GET'])
-def listar_personas():
-    """GET /personas  →  todas las personas.
-       Acepta ?nombre=... para filtrar."""
-    consulta = Person.query
-
-    nombre = request.args.get('nombre')
-    if nombre:
-        consulta = consulta.filter(Person.name.ilike(f'%{nombre}%'))
-
-    personas = consulta.order_by(Person.name).all()
-
+@app.route('/autores', methods=['GET'])
+def listar_autores():
+    """GET /autores  →  todos los autores con su cantidad de libros."""
+    autores = Autor.query.order_by(Autor.nombre).all()
     return jsonify({
         'success': True,
-        'total': len(personas),
-        'personas': [p.format() for p in personas]
+        'total': len(autores),
+        'autores': [a.format() for a in autores],
     })
 
 
-@app.route('/personas/<int:person_id>', methods=['GET'])
-def obtener_persona(person_id):
-    """GET /personas/3  →  una sola persona, o 404."""
-    persona = Person.query.get(person_id)
+@app.route('/libros', methods=['GET'])
+def listar_libros():
+    """GET /libros  →  todos los libros. Acepta ?autor=... para filtrar."""
+    consulta = Libro.query
 
-    if persona is None:
+    autor = request.args.get('autor')
+    if autor:
+        consulta = consulta.join(Autor).filter(
+            Autor.nombre.ilike(f'%{autor}%'))
+
+    libros = consulta.order_by(Libro.titulo).all()
+
+    return jsonify({
+        'success': True,
+        'total': len(libros),
+        'libros': [l.format() for l in libros],
+    })
+
+
+@app.route('/libros/<int:libro_id>', methods=['GET'])
+def obtener_libro(libro_id):
+    """GET /libros/3  →  un solo libro, o 404."""
+    libro = Libro.query.get(libro_id)
+
+    if libro is None:
         abort(404)
 
-    return jsonify({'success': True, 'persona': persona.format()})
+    return jsonify({'success': True, 'libro': libro.format()})
 
 
 @app.route('/', methods=['GET'])
 def salud():
-    """GET /  →  comprobación rápida de que la conexión funciona."""
-    total = Person.query.count()
-    return jsonify({'status': 'ok', 'personas_registradas': total})
+    """GET /  →  comprobacion rapida de que la conexion funciona."""
+    return jsonify({
+        'status': 'ok',
+        'autores': Autor.query.count(),
+        'libros': Libro.query.count(),
+    })
 
 
 @app.errorhandler(404)

@@ -1,45 +1,51 @@
-"""Crea la tabla `persons` y la puebla con ~50 registros de ejemplo.
+"""Crea las tablas `autores` y `libros` y las puebla con datos de ejemplo.
 
 Uso:
-    uv run seed.py            # crea la tabla y la puebla si esta vacia
-    uv run seed.py --reset    # borra las filas existentes y vuelve a poblar
+    uv run seed.py            # crea las tablas y puebla si estan vacias
+    uv run seed.py --reset    # borra lo existente y vuelve a poblar
 """
 import sys
 
-from main import app, db, Person
+from main import app
+from models import db, Autor, Libro
 
-NOMBRES = [
-    'Ana', 'Luis', 'Maria', 'Carlos', 'Sofia', 'Miguel', 'Lucia', 'Javier',
-    'Elena', 'Diego', 'Carmen', 'Andres', 'Paula', 'Ricardo', 'Valeria',
-    'Fernando', 'Isabel', 'Alejandro', 'Natalia', 'Sergio', 'Patricia',
-    'Rodrigo', 'Gabriela', 'Tomas', 'Daniela',
+CATALOGO = [
+    ('James Kurose', 'Estados Unidos', [
+        ('Redes de computadoras', 2017, True),
+        ('Computer Networking: A Top-Down Approach', 2020, True),
+    ]),
+    ('Andrew Tanenbaum', 'Paises Bajos', [
+        ('Sistemas operativos modernos', 2009, True),
+        ('Redes de computadoras', 2011, False),
+        ('Organizacion de computadoras', 2013, True),
+    ]),
+    ('Robert Martin', 'Estados Unidos', [
+        ('Clean Code', 2008, True),
+        ('Clean Architecture', 2017, False),
+    ]),
+    ('Martin Fowler', 'Reino Unido', [
+        ('Refactoring', 1999, True),
+        ('Patterns of Enterprise Application Architecture', 2002, True),
+    ]),
+    ('Gabriel Garcia Marquez', 'Colombia', [
+        ('Cien anios de soledad', 1967, True),
+        ('El amor en los tiempos del colera', 1985, False),
+    ]),
+    ('Isabel Allende', 'Chile', [
+        ('La casa de los espiritus', 1982, True),
+    ]),
 ]
 
-APELLIDOS = [
-    'Garcia', 'Rodriguez', 'Martinez', 'Lopez', 'Perez', 'Gonzalez',
-    'Sanchez', 'Ramirez', 'Torres', 'Flores', 'Rivera', 'Gomez',
-    'Diaz', 'Vargas', 'Castillo', 'Morales', 'Ortiz', 'Silva',
-    'Rojas', 'Medina',
-]
 
-
-def generar_personas(cantidad=50):
-    """Genera `cantidad` personas con nombre unico, edad y correo."""
-    personas = []
-    for i in range(cantidad):
-        nombre = NOMBRES[i % len(NOMBRES)]
-        apellido = APELLIDOS[(i * 7) % len(APELLIDOS)]
-        nombre_completo = f'{nombre} {apellido}'
-
-        # El nombre es UNIQUE en la tabla: si se repite, agregamos un sufijo.
-        if any(p.name == nombre_completo for p in personas):
-            nombre_completo = f'{nombre_completo} {i}'
-
-        correo = f'{nombre.lower()}.{apellido.lower()}{i}@example.com'
-        edad = 18 + (i * 3) % 50
-
-        personas.append(Person(name=nombre_completo, age=edad, email=correo))
-    return personas
+def poblar():
+    """Inserta los autores con sus libros; la cascada guarda ambos."""
+    for nombre, nacionalidad, libros in CATALOGO:
+        autor = Autor(nombre=nombre, nacionalidad=nacionalidad)
+        for titulo, anio, disponible in libros:
+            autor.libros.append(
+                Libro(titulo=titulo, anio=anio, disponible=disponible))
+        db.session.add(autor)
+    db.session.commit()
 
 
 def main():
@@ -47,22 +53,23 @@ def main():
 
     with app.app_context():
         db.create_all()
-        print('Tabla `persons` lista.')
+        print('Tablas `autores` y `libros` listas.')
 
         if reset:
-            borradas = Person.query.delete()
+            # Borrar el autor arrastra sus libros por la cascada.
+            for autor in Autor.query.all():
+                db.session.delete(autor)
             db.session.commit()
-            print(f'Se borraron {borradas} registros previos.')
+            print('Se borraron los registros previos.')
 
-        existentes = Person.query.count()
-        if existentes and not reset:
-            print(f'La tabla ya tiene {existentes} registros; '
+        if Autor.query.count() and not reset:
+            print(f'Ya hay {Autor.query.count()} autores; '
                   f'usa --reset para regenerarlos.')
             return
 
-        db.session.add_all(generar_personas(50))
-        db.session.commit()
-        print(f'Insertados {Person.query.count()} registros en `persons`.')
+        poblar()
+        print(f'Insertados {Autor.query.count()} autores y '
+              f'{Libro.query.count()} libros.')
 
 
 if __name__ == '__main__':
