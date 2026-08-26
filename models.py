@@ -15,8 +15,6 @@ class Autor(db.Model):
     nombre = db.Column(db.String(120), nullable=False)
     nacionalidad = db.Column(db.String(80))
 
-    # backref='autor' crea Libro.autor sin declararlo del otro lado.
-    # cascade='all, delete-orphan': al borrar el autor se van sus libros.
     libros = db.relationship('Libro', backref='autor',
                              lazy=True, cascade='all, delete-orphan')
 
