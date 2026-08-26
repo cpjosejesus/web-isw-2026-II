@@ -67,3 +67,29 @@ footer {
   font-size: .85rem;
   border-top: 1px solid var(--borde);
 }
+
+.aviso {
+  padding: .7rem 1rem;
+  margin-bottom: 1.2rem;
+  border-left: 3px solid var(--tenue);
+  background: #fff;
+  font-size: .95rem;
+}
+
+.aviso.exito { border-left-color: #3d7a3d; }
+.aviso.error { border-left-color: #a33; }
+
+.formulario { display: grid; gap: .35rem; max-width: 26rem; }
+.formulario label { color: var(--tenue); font-size: .9rem; margin-top: .6rem; }
+.formulario .checkbox { display: flex; align-items: center; gap: .4rem; color: var(--tinta); }
+.formulario .checkbox input { width: auto; }
+.formulario .acciones { display: flex; align-items: center; gap: 1rem; margin-top: 1.2rem; }
+
+.boton {
+  display: inline-block;
+  padding: .45rem .8rem;
+  background: var(--acento);
+  color: #fff;
+  border-radius: 3px;
+  text-decoration: none;
+}

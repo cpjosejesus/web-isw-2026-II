@@ -16,6 +16,14 @@
     </nav>
 
     <main>
+      {# Los avisos viajan en la sesion: sobreviven al redirect y se
+         consumen una sola vez. #}
+      {% with mensajes = get_flashed_messages(with_categories=true) %}
+        {% for categoria, texto in mensajes %}
+          <div class="aviso {{ categoria }}">{{ texto }}</div>
+        {% endfor %}
+      {% endwith %}
+
       {% block contenido %}{% endblock %}
     </main>
 

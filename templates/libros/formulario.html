@@ -1,0 +1,42 @@
+{% extends 'layout.html' %}
+
+{% block titulo %}{{ 'Editar libro' if libro else 'Nuevo libro' }}{% endblock %}
+
+{% block contenido %}
+  <h1>{{ 'Editar libro' if libro else 'Nuevo libro' }}</h1>
+
+  {# Un solo formulario para crear y editar: cambia el action y los valores #}
+  <form method="POST" class="formulario"
+        action="{{ url_for('editar_libro', libro_id=libro.id) if libro
+                  else url_for('crear_libro') }}">
+
+    <label for="titulo">Titulo</label>
+    <input id="titulo" type="text" name="titulo" required
+           value="{{ libro.titulo if libro else '' }}" />
+
+    <label for="anio">Anio</label>
+    <input id="anio" type="number" name="anio"
+           value="{{ libro.anio if libro and libro.anio else '' }}" />
+
+    <label for="autor_id">Autor</label>
+    <select id="autor_id" name="autor_id" required>
+      {% for a in autores %}
+        <option value="{{ a.id }}"
+                {% if libro and libro.autor_id == a.id %}selected{% endif %}>
+          {{ a.nombre }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <label class="checkbox">
+      <input type="checkbox" name="disponible"
+             {% if not libro or libro.disponible %}checked{% endif %} />
+      Disponible
+    </label>
+
+    <div class="acciones">
+      <button type="submit">{{ 'Guardar cambios' if libro else 'Crear' }}</button>
+      <a href="{{ url_for('listar_libros') }}">Cancelar</a>
+    </div>
+  </form>
+{% endblock %}

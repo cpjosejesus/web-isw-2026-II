@@ -1,12 +1,12 @@
-"""Biblioteca — ahora las rutas devuelven HTML.
+"""Biblioteca — el usuario ya puede escribir en la base.
 
-render_template busca el archivo bajo templates/, lo rellena con los datos
-que le pasa la ruta y devuelve texto HTML. La plantilla no consulta la base:
-la ruta consulta y le entrega los objetos ya listos.
+Las lecturas siguen siendo GET; toda escritura es POST y termina en un
+redirect. Ese es el patron Post/Redirect/Get: si el usuario recarga con F5,
+la ultima peticion del historial es un GET inofensivo y no se duplica nada.
 """
 import os
 
-from flask import Flask, render_template, request
+from flask import Flask, flash, redirect, render_template, request, url_for
 
 from models import db, Autor, Libro
 
@@ -16,6 +16,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'postgresql+psycopg://app:123qwe@localhost:5433/store'
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Necesaria para firmar la sesion, que es donde viajan los mensajes flash.
+app.secret_key = os.environ.get('SECRET_KEY', 'clave-de-desarrollo')
 
 db.init_app(app)
 
@@ -48,6 +50,33 @@ def detalle_libro(libro_id):
     """GET /libros/3  →  ficha del libro, o 404."""
     libro = Libro.query.get_or_404(libro_id)
     return render_template('libros/detalle.html', libro=libro)
+
+
+@app.route('/libros/crear', methods=['GET', 'POST'])
+def crear_libro():
+    """GET  →  muestra el formulario vacio.
+       POST →  inserta el libro y redirige al catalogo."""
+    if request.method == 'GET':
+        return render_template('libros/formulario.html', libro=None,
+                               autores=Autor.query.order_by(Autor.nombre).all())
+
+    try:
+        libro = Libro(
+            titulo=request.form['titulo'],          # KeyError → 400 si falta
+            anio=request.form.get('anio') or None,  # seguro, con default
+            autor_id=request.form['autor_id'],
+            # un checkbox sin marcar no se envia: por eso 'in request.form'
+            disponible='disponible' in request.form,
+        )
+        db.session.add(libro)
+        db.session.commit()
+        flash('Libro creado.', 'exito')
+    except Exception:
+        db.session.rollback()
+        flash('No se pudo crear el libro.', 'error')
+
+    # Post/Redirect/Get: nunca render_template como respuesta a un POST.
+    return redirect(url_for('listar_libros'))
 
 
 @app.route('/autores')

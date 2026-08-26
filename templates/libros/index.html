@@ -5,6 +5,8 @@
 {% block contenido %}
   <h1>Catalogo</h1>
 
+  <p><a class="boton" href="{{ url_for('crear_libro') }}">Nuevo libro</a></p>
+
   <form method="GET" action="{{ url_for('listar_libros') }}" class="filtro">
     <input type="text" name="autor" value="{{ filtro_autor }}"
            placeholder="Filtrar por autor" />
