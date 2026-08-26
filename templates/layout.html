@@ -3,7 +3,6 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- url_for('static', ...) tambien vale para los archivos estaticos -->
     <link rel="stylesheet"
           href="{{ url_for('static', filename='css/estilos.css') }}" />
     <title>{% block titulo %}Biblioteca{% endblock %}</title>
@@ -16,8 +15,6 @@
     </nav>
 
     <main>
-      {# Los avisos viajan en la sesion: sobreviven al redirect y se
-         consumen una sola vez. #}
       {% with mensajes = get_flashed_messages(with_categories=true) %}
         {% for categoria, texto in mensajes %}
           <div class="aviso {{ categoria }}">{{ texto }}</div>

@@ -23,7 +23,6 @@
   <div class="acciones">
     <a class="boton" href="{{ url_for('editar_libro', libro_id=libro.id) }}">Editar</a>
 
-    {# Borrar jamas con un enlace: un rastreador puede visitarlo solo. #}
     <form method="POST" class="en-linea"
           action="{{ url_for('eliminar_libro', libro_id=libro.id) }}">
       <button type="submit"
