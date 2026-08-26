@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Del modelo a la pantalla - Jinja2, formularios y CRUD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E4E7E2;
+    --paper-2:#DADFD9;
+    --ink:#10201F;
+    --ink-soft:rgba(16,32,31,.62);
+    --teal:#0E6560;
+    --plum:#7A2A55;
+    --amber:#C98A0E;
+    --rule:rgba(16,32,31,.16);
+    --spine-w:200px;
+    --pad:clamp(20px,4.2vw,72px);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    font-size:16px;
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+  /* ---------- estructura ---------- */
+  .deck{display:flex;height:100vh;height:100dvh;width:100%}
+  .spine{
+    width:var(--spine-w);flex:0 0 var(--spine-w);
+    border-right:1px solid var(--rule);
+    padding:var(--pad) 0 0 clamp(14px,2vw,26px);
+    display:flex;flex-direction:column;justify-content:flex-end;
+    padding-bottom:clamp(18px,3vw,34px);
+    background:linear-gradient(180deg,transparent,rgba(14,101,96,.05));
+  }
+  .spine-title{
+    font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--ink-soft);margin-bottom:14px;
+  }
+  .layer{
+    position:relative;padding:7px 0 7px 18px;
+    font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--ink-soft);opacity:.45;
+    transition:opacity .35s ease,color .35s ease;
+  }
+  .layer::before{
+    content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
+    width:7px;height:7px;border:1px solid currentColor;border-radius:50%;
+    transition:background .35s ease,transform .35s ease;
+  }
+  .layer.done{opacity:.7}
+  .layer.done::before{background:currentColor}
+  .layer.on{opacity:1;color:var(--teal);font-weight:600}
+  .layer.on::before{background:var(--teal);transform:translateY(-50%) scale(1.6)}
+  .spine-foot{
+    margin-top:auto;padding-top:20px;font-family:"IBM Plex Mono",monospace;
+    font-size:10px;color:var(--ink-soft);letter-spacing:.06em;
+  }
+
+  .stage{position:relative;flex:1;min-width:0;overflow:hidden}
+  .slide{
+    position:absolute;inset:0;padding:var(--pad);
+    display:none;flex-direction:column;justify-content:center;
+    overflow-y:auto;
+  }
+  .slide.active{display:flex;animation:enter .45s cubic-bezier(.2,.7,.3,1)}
+  @keyframes enter{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){
+    .slide.active{animation:none}
+    .layer,.layer::before{transition:none}
+  }
+
+  /* ---------- tipografía ---------- */
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--teal);margin-bottom:16px;
+  }
+  h1{
+    font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;
+    font-weight:800;font-size:clamp(34px,6.4vw,80px);line-height:.98;
+    letter-spacing:-.02em;margin:0 0 20px;
+  }
+  h2{
+    font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;
+    font-weight:700;font-size:clamp(26px,3.9vw,48px);line-height:1.04;
+    letter-spacing:-.015em;margin:0 0 22px;max-width:22ch;
+  }
+  h3{
+    font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;
+    font-weight:700;font-size:clamp(16px,1.5vw,20px);margin:0 0 10px;
+  }
+  p{margin:0 0 14px;font-size:clamp(14px,1.35vw,19px);line-height:1.55;max-width:60ch}
+  .lead{font-size:clamp(16px,1.7vw,23px);color:var(--ink)}
+  .muted{color:var(--ink-soft)}
+  strong{font-weight:600}
+  em.hl{font-style:normal;background:linear-gradient(transparent 62%,rgba(201,138,14,.35) 62%)}
+  .plum{color:var(--plum)}
+  .teal{color:var(--teal)}
+
+  ul.bullets{list-style:none;margin:0;padding:0;max-width:64ch}
+  ul.bullets li{
+    position:relative;padding-left:26px;margin-bottom:14px;
+    font-size:clamp(14px,1.35vw,19px);line-height:1.5;
+  }
+  ul.bullets li::before{
+    content:"";position:absolute;left:0;top:.62em;width:12px;height:1px;background:var(--teal)
+  }
+
+  /* ---------- piezas ---------- */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:clamp(16px,2.4vw,40px);align-items:start}
+  .card{
+    border:1px solid var(--rule);background:rgba(255,255,255,.42);
+    padding:clamp(14px,1.7vw,24px);border-radius:2px;
+  }
+  .card.accent{border-left:3px solid var(--teal)}
+  .card.warn{border-left:3px solid var(--plum);background:rgba(122,42,85,.06)}
+
+  table{border-collapse:collapse;width:100%;font-size:clamp(12px,1.15vw,16px)}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{
+    font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-soft);font-weight:500;
+  }
+  td.num{font-family:"IBM Plex Mono",monospace;color:var(--plum);font-weight:500;white-space:nowrap}
+  tr.key td{background:rgba(14,101,96,.09)}
+
+  pre{
+    font-family:"IBM Plex Mono",monospace;font-size:clamp(11px,1.05vw,15px);
+    line-height:1.62;background:var(--ink);color:#D6E0DD;
+    padding:clamp(12px,1.5vw,22px);border-radius:3px;overflow-x:auto;margin:0 0 14px;
+  }
+  pre .c{color:#6E8B86}
+  pre .s{color:#E3B7A0}
+  pre .k{color:#7FCFC7}
+  pre .n{color:#E0C378}
+  code.inline{
+    font-family:"IBM Plex Mono",monospace;font-size:.9em;
+    background:rgba(16,32,31,.08);padding:1px 5px;border-radius:2px;
+  }
+
+  .stack{display:flex;flex-direction:column-reverse;gap:6px;max-width:640px}
+  .stack .s{
+    border:1px solid var(--rule);padding:10px 16px;background:rgba(255,255,255,.5);
+    font-family:"IBM Plex Mono",monospace;font-size:clamp(11px,1.05vw,14px);
+    display:flex;justify-content:space-between;gap:16px;
+  }
+  .stack .s b{font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+  .stack .s span{color:var(--ink-soft)}
+  .stack .s.hi{background:var(--teal);color:#EAF2F0;border-color:var(--teal)}
+  .stack .s.hi span{color:rgba(255,255,255,.72)}
+
+  .osi{display:flex;flex-direction:column;gap:4px;max-width:900px;width:100%}
+  .osi .lay{
+    display:grid;grid-template-columns:34px 200px 1fr;align-items:center;gap:14px;
+    border:1px solid var(--rule);border-left:3px solid var(--teal);
+    background:rgba(255,255,255,.5);padding:8px 14px;
+  }
+  .osi .lay .num{
+    font-family:"IBM Plex Mono",monospace;font-weight:600;
+    font-size:clamp(12px,1.2vw,16px);color:var(--teal);
+  }
+  .osi .lay .nm{
+    font-family:"Bricolage Grotesque",sans-serif;font-weight:700;
+    font-size:clamp(12px,1.25vw,17px);letter-spacing:-.01em;
+  }
+  .osi .lay .de{font-size:clamp(11px,1.05vw,15px);color:var(--ink-soft);line-height:1.35}
+  .osi .lay.host{border-left-color:var(--plum)}
+  .osi .lay.host .num{color:var(--plum)}
+  .osi .lay.mark{background:rgba(14,101,96,.12)}
+  @media (max-width:860px){
+    .osi .lay{grid-template-columns:26px 1fr;gap:8px}
+    .osi .lay .de{grid-column:2}
+  }
+
+  .fig{
+    display:block;max-width:100%;max-height:56vh;margin:4px auto 12px;
+    background:#fff;border:1px solid var(--rule);border-radius:3px;
+    padding:clamp(6px,1vw,14px);object-fit:contain;
+  }
+  .figcap{
+    font-family:"IBM Plex Mono",monospace;font-size:clamp(10px,.95vw,12.5px);
+    color:var(--ink-soft);text-align:center;letter-spacing:.03em;max-width:78ch;margin:0 auto;
+  }
+  .slide.figslide{justify-content:flex-start;padding-top:clamp(18px,3vw,40px)}
+  .slide.figslide h2{margin-bottom:12px}
+
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:6px 0 18px}
+  .flow .n{
+    font-family:"IBM Plex Mono",monospace;font-size:clamp(11px,1.1vw,15px);
+    border:1px solid var(--teal);color:var(--teal);padding:7px 14px;border-radius:2px;
+  }
+  .flow .a{color:var(--ink-soft)}
+
+  .big{
+    font-family:"Bricolage Grotesque",sans-serif;font-weight:800;
+    font-size:clamp(40px,7vw,96px);line-height:1;letter-spacing:-.03em;color:var(--teal);
+  }
+  .acid{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(10px,1.4vw,20px)}
+  .acid .l{
+    font-family:"Bricolage Grotesque",sans-serif;font-weight:800;
+    font-size:clamp(30px,4.4vw,62px);line-height:1;color:var(--plum);
+  }
+
+  /* ---------- hud ---------- */
+  .hud{
+    position:fixed;right:clamp(12px,2vw,26px);bottom:clamp(10px,1.6vw,20px);
+    display:flex;align-items:center;gap:12px;z-index:5;
+  }
+  .hud button{
+    font-family:"IBM Plex Mono",monospace;font-size:13px;
+    background:none;border:1px solid var(--rule);color:var(--ink);
+    width:32px;height:32px;border-radius:2px;cursor:pointer;line-height:1;
+  }
+  .hud button:hover{background:rgba(14,101,96,.12);border-color:var(--teal)}
+  .hud button:focus-visible,.layer:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .count{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+  .bar{position:fixed;left:0;bottom:0;height:2px;background:var(--teal);z-index:6;transition:width .3s ease;width:0}
+
+  /* ---------- portada ---------- */
+  .cover h1{max-width:16ch}
+  .cover .rule{width:90px;height:3px;background:var(--plum);margin:0 0 26px}
+  .cover .meta{
+    font-family:"IBM Plex Mono",monospace;font-size:clamp(11px,1.1vw,14px);
+    color:var(--ink-soft);letter-spacing:.06em;line-height:1.9;margin-top:24px;
+  }
+
+  /* ---------- responsive ---------- */
+  @media (max-width:860px){
+    :root{--spine-w:100%}
+    .deck{flex-direction:column}
+    .spine{
+      flex:0 0 auto;width:100%;border-right:none;border-bottom:1px solid var(--rule);
+      flex-direction:row;align-items:center;gap:4px;overflow-x:auto;
+      padding:10px 14px;justify-content:flex-start;
+    }
+    .spine-title,.spine-foot{display:none}
+    .layer{padding:4px 10px 4px 16px;font-size:9.5px;white-space:nowrap}
+    .grid2,.acid{grid-template-columns:1fr}
+    .acid{grid-template-columns:1fr 1fr}
+    .slide{justify-content:flex-start;padding-top:26px;padding-bottom:64px}
+  }
+</style>
+</head>
+<body>
+<div class="deck">
+  <aside class="spine" id="spine">
+    <div class="spine-title">El ciclo</div>
+    <div class="layer" data-l="peticion">Petición</div>
+    <div class="layer" data-l="ruta">Ruta</div>
+    <div class="layer" data-l="modelo">Modelo</div>
+    <div class="layer" data-l="plantilla">Plantilla</div>
+    <div class="layer" data-l="respuesta">Respuesta</div>
+    <div class="spine-foot">← → para navegar</div>
+  </aside>
+
+  <main class="stage" id="stage">
+
+    <!-- 1 · portada -->
+    <section class="slide cover" data-layer="">
+      <div class="eyebrow">Clase 4 · Unidad 2 · 150 minutos</div>
+      <div class="rule"></div>
+      <h1>Del modelo<br>a la pantalla</h1>
+      <p class="lead" style="max-width:47ch">Jinja2, formularios y CRUD completo sobre PostgreSQL. Seguimos con la <strong>biblioteca</strong> de clase; al final, la especificación de la tarea.</p>
+      <div class="meta">
+        ISW-233 · APLICACIONES WEB I · GESTIÓN II/2026<br>
+        Jose Jesus Cabrera Pantoja · UCB Santa Cruz
+      </div>
+    </section>
+
+    <!-- 2 · dónde quedamos -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Dónde quedamos</div>
+      <h2>Teníamos datos. Nadie podía verlos.</h2>
+      <div class="grid2">
+        <div class="card">
+          <h3>Hasta ahora</h3>
+          <ul class="bullets" style="margin-top:6px">
+            <li>La lista <code class="inline">LIBROS</code> vivía en <strong>memoria</strong></li>
+            <li>Después pasó a PostgreSQL, como modelo</li>
+            <li>Las rutas devuelven <strong>JSON</strong></li>
+          </ul>
+        </div>
+        <div class="card accent">
+          <h3>Hoy</h3>
+          <ul class="bullets" style="margin-top:6px">
+            <li>HTML renderizado <strong>para humanos</strong></li>
+            <li>El usuario <strong>escribe</strong> en la base desde el navegador</li>
+            <li>Crear, leer, actualizar y borrar</li>
+          </ul>
+        </div>
+      </div>
+      <p class="muted" style="margin-top:18px">JSON es para que hablen dos programas. Hoy el cliente es una persona con un navegador.</p>
+    </section>
+
+    <!-- 3 · plan -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Plan de la clase</div>
+      <h2>150 minutos</h2>
+      <table>
+        <tr><th>Bloque</th><th>Tema</th><th>Min</th></tr>
+        <tr><td class="num">1</td><td>Relaciones uno-a-muchos: Autor → Libro</td><td class="num">25</td></tr>
+        <tr><td class="num">2</td><td>Jinja2: plantillas, herencia y <code class="inline">url_for</code></td><td class="num">35</td></tr>
+        <tr><td class="num">3</td><td>Formularios y el patrón POST → Redirect → GET</td><td class="num">30</td></tr>
+        <tr><td class="num">4</td><td>CRUD completo y manejo de errores</td><td class="num">30</td></tr>
+        <tr class="key"><td class="num">5</td><td><strong>La tarea: especificación y entrega con Docker</strong></td><td class="num">30</td></tr>
+      </table>
+      <p class="muted" style="margin-top:16px">Todo lo de hoy se demuestra sobre la biblioteca. La aplicación de restaurantes la construyen ustedes.</p>
+    </section>
+
+    <!-- 4 · ciclo -->
+    <section class="slide" data-layer="peticion">
+      <div class="eyebrow">El ciclo</div>
+      <h2>Lo que ocurre entre el clic y el pixel</h2>
+      <div class="flow">
+        <span class="n">Navegador</span><span class="a">→</span>
+        <span class="n">Ruta Flask</span><span class="a">→</span>
+        <span class="n">Consulta ORM</span><span class="a">→</span>
+        <span class="n">Plantilla Jinja</span><span class="a">→</span>
+        <span class="n">HTML</span>
+      </div>
+      <p class="lead">Cinco pasos. Los dos del medio ya los construimos; hoy completamos los extremos.</p>
+      <div class="card accent" style="margin-top:8px">
+        <p style="margin:0" class="muted">La plantilla no consulta la base de datos. La ruta consulta y le <strong>entrega</strong> los datos ya listos. Esa separación es todo el patrón.</p>
+      </div>
+    </section>
+
+    <!-- 5 · dominio -->
+    <section class="slide" data-layer="modelo">
+      <div class="eyebrow">Bloque 1 · El dominio de clase</div>
+      <h2>La biblioteca crece: autores y libros</h2>
+      <div class="flow">
+        <span class="n">Autor</span><span class="a">1 ────── N</span><span class="n">Libro</span>
+      </div>
+      <div class="grid2" style="margin-top:6px">
+        <div class="card">
+          <h3>Autor</h3>
+          <p class="muted" style="margin:0">id · nombre · nacionalidad</p>
+        </div>
+        <div class="card">
+          <h3>Libro</h3>
+          <p class="muted" style="margin:0">id · título · año · disponible · <strong>autor_id</strong></p>
+        </div>
+      </div>
+      <p style="margin-top:20px">Un autor tiene muchos libros. Un libro pertenece a <em class="hl">exactamente un</em> autor. La llave foránea siempre vive del lado <strong>muchos</strong>.</p>
+    </section>
+
+    <!-- 6 · modelos -->
+    <section class="slide" data-layer="modelo">
+      <div class="eyebrow">Bloque 1 · El dominio de clase</div>
+      <h2>Los dos modelos</h2>
+<pre><span class="k">class</span> <span class="n">Autor</span>(db.Model):
+  __tablename__ = <span class="s">'autores'</span>
+  id     = db.Column(db.Integer, primary_key=<span class="k">True</span>)
+  nombre = db.Column(db.String(<span class="n">120</span>), nullable=<span class="k">False</span>)
+
+  libros = db.relationship(<span class="s">'Libro'</span>, backref=<span class="s">'autor'</span>,
+                           lazy=<span class="k">True</span>, cascade=<span class="s">'all, delete-orphan'</span>)
+
+<span class="k">class</span> <span class="n">Libro</span>(db.Model):
+  __tablename__ = <span class="s">'libros'</span>
+  id         = db.Column(db.Integer, primary_key=<span class="k">True</span>)
+  titulo     = db.Column(db.String(<span class="n">200</span>), nullable=<span class="k">False</span>)
+  anio       = db.Column(db.Integer)
+  disponible = db.Column(db.Boolean, nullable=<span class="k">False</span>, default=<span class="k">True</span>)
+  autor_id   = db.Column(db.Integer,
+      db.ForeignKey(<span class="s">'autores.id'</span>), nullable=<span class="k">False</span>)</pre>
+    </section>
+
+    <!-- 7 · relationship -->
+    <section class="slide" data-layer="modelo">
+      <div class="eyebrow">Bloque 1 · El dominio de clase</div>
+      <h2><code class="inline" style="font-size:.72em">db.relationship</code> no es una columna</h2>
+      <table>
+        <tr><th></th><th>Qué es</th><th>Dónde vive</th></tr>
+        <tr><td class="num">db.ForeignKey</td><td>una <strong>columna real</strong> en la tabla</td><td>en la base de datos</td></tr>
+        <tr><td class="num">db.relationship</td><td>un <strong>atajo de Python</strong></td><td>solo en el ORM</td></tr>
+      </table>
+<pre>a = Autor.query.get(<span class="n">1</span>)
+a.libros          <span class="c"># → [&lt;Libro Redes&gt;, &lt;Libro Sistemas Operativos&gt;]</span>
+
+l = Libro.query.get(<span class="n">7</span>)
+l.autor           <span class="c"># → &lt;Autor Kurose&gt;        (gracias al backref)</span></pre>
+      <p class="muted"><code class="inline">cascade='all, delete-orphan'</code>: si borras el autor, sus libros se van con él. Sin eso, quedan filas huérfanas apuntando a nada.</p>
+    </section>
+
+    <!-- 8 · json vs html -->
+    <section class="slide" data-layer="respuesta">
+      <div class="eyebrow">Bloque 2 · Plantillas</div>
+      <h2>Dos formas de responder</h2>
+      <div class="grid2">
+        <div>
+          <h3>Para una máquina</h3>
+<pre><span class="k">return</span> jsonify({
+  <span class="s">'titulo'</span>: l.titulo
+})</pre>
+          <p class="muted" style="font-size:.9em">Content-Type: application/json</p>
+        </div>
+        <div>
+          <h3>Para una persona</h3>
+<pre><span class="k">return</span> render_template(
+  <span class="s">'libros/index.html'</span>,
+  libros=lista
+)</pre>
+          <p class="muted" style="font-size:.9em">Content-Type: text/html</p>
+        </div>
+      </div>
+      <p style="margin-top:14px"><code class="inline">render_template</code> busca el archivo en la carpeta <code class="inline">templates/</code>, lo rellena con los datos que le pasas y devuelve <em class="hl">texto HTML</em>. Nada más.</p>
+    </section>
+
+    <!-- 9 · estructura -->
+    <section class="slide" data-layer="respuesta">
+      <div class="eyebrow">Bloque 2 · Plantillas</div>
+      <h2>Dónde va cada cosa</h2>
+<pre>biblioteca/
+├── app.py
+├── models.py
+├── requirements.txt
+├── <span class="k">templates/</span>              <span class="c"># Flask busca aquí, por convención</span>
+│   ├── layout.html
+│   ├── libros/
+│   │   ├── index.html
+│   │   ├── detalle.html
+│   │   └── formulario.html
+│   └── errores/
+│       ├── 404.html
+│       └── 500.html
+└── <span class="k">static/</span>                 <span class="c"># css, imágenes, js</span>
+    └── css/estilos.css</pre>
+      <p class="muted">Los nombres <code class="inline">templates</code> y <code class="inline">static</code> no son opcionales: Flask los busca por convención.</p>
+    </section>
+
+    <!-- 10 · delimitadores -->
+    <section class="slide" data-layer="plantilla">
+      <div class="eyebrow">Bloque 2 · Plantillas</div>
+      <h2>Jinja2 tiene tres delimitadores</h2>
+      <table>
+        <tr><th>Sintaxis</th><th>Para qué</th><th>Ejemplo</th></tr>
+        <tr class="key"><td class="num">{{ ... }}</td><td><strong>Imprime</strong> una expresión</td><td class="num">{{ l.titulo }}</td></tr>
+        <tr class="key"><td class="num">{% ... %}</td><td><strong>Ejecuta</strong> lógica</td><td class="num">{% for l in libros %}</td></tr>
+        <tr><td class="num">{# ... #}</td><td>Comentario</td><td class="num">{# no sale en el HTML #}</td></tr>
+      </table>
+      <p style="margin-top:20px">La regla mental: <em class="hl">llaves dobles imprimen, llaves con porcentaje deciden</em>. Casi todos los errores de la primera semana con Jinja son confundir una con otra.</p>
+    </section>
+
+    <!-- 11 · listado -->
+    <section class="slide" data-layer="plantilla">
+      <div class="eyebrow">Bloque 2 · Plantillas</div>
+      <h2>Recorrer una lista</h2>
+<pre>&lt;ul&gt;
+{% <span class="k">for</span> l <span class="k">in</span> libros %}
+  &lt;li&gt;
+    &lt;strong&gt;{{ l.titulo }}&lt;/strong&gt; — {{ l.autor.nombre }}
+    {% <span class="k">if</span> <span class="k">not</span> l.disponible %}&lt;em&gt;(prestado)&lt;/em&gt;{% <span class="k">endif</span> %}
+  &lt;/li&gt;
+{% <span class="k">else</span> %}
+  &lt;li&gt;Todavía no hay libros cargados.&lt;/li&gt;
+{% <span class="k">endfor</span> %}
+&lt;/ul&gt;</pre>
+      <div class="card accent">
+        <p style="margin:0">El <code class="inline">{% else %}</code> del <code class="inline">for</code> se ejecuta cuando la lista <strong>viene vacía</strong>. No existe en Python; es un regalo de Jinja y evita un <code class="inline">{% if %}</code> extra.</p>
+      </div>
+    </section>
+
+    <!-- 12 · herencia -->
+    <section class="slide" data-layer="plantilla">
+      <div class="eyebrow">Bloque 2 · Plantillas</div>
+      <h2>Herencia: escribir el <code class="inline" style="font-size:.72em">&lt;head&gt;</code> una sola vez</h2>
+      <div class="grid2">
+        <div>
+          <h3>layout.html</h3>
+<pre>&lt;!DOCTYPE html&gt;
+&lt;html lang="es"&gt;
+&lt;head&gt;
+  &lt;title&gt;{% <span class="k">block</span> titulo %}Biblioteca{% <span class="k">endblock</span> %}&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;nav&gt;...&lt;/nav&gt;
+  {% <span class="k">block</span> contenido %}{% <span class="k">endblock</span> %}
+&lt;/body&gt;
+&lt;/html&gt;</pre>
+        </div>
+        <div>
+          <h3>libros/index.html</h3>
+<pre>{% <span class="k">extends</span> <span class="s">'layout.html'</span> %}
+
+{% <span class="k">block</span> titulo %}Libros{% <span class="k">endblock</span> %}
+
+{% <span class="k">block</span> contenido %}
+  &lt;h1&gt;Catálogo&lt;/h1&gt;
+  ...
+{% <span class="k">endblock</span> %}</pre>
+        </div>
+      </div>
+      <p class="muted"><code class="inline">{% extends %}</code> debe ser la <strong>primera línea</strong> del archivo hijo.</p>
+    </section>
+
+    <!-- 13 · url_for -->
+    <section class="slide" data-layer="plantilla">
+      <div class="eyebrow">Bloque 2 · Plantillas</div>
+      <h2>Nunca escribas una ruta a mano</h2>
+<pre><span class="c">&lt;!-- ❌ frágil: si cambia la ruta, hay que buscar en 14 archivos --&gt;</span>
+&lt;a href="/libros/{{ l.id }}"&gt;Ver&lt;/a&gt;
+
+<span class="c">&lt;!-- ✅ Flask construye la URL desde el nombre de la función --&gt;</span>
+&lt;a href="{{ url_for(<span class="s">'detalle_libro'</span>, libro_id=l.id) }}"&gt;Ver&lt;/a&gt;
+
+&lt;link rel="stylesheet"
+      href="{{ url_for(<span class="s">'static'</span>, filename=<span class="s">'css/estilos.css'</span>) }}"&gt;</pre>
+      <p><code class="inline">url_for</code> recibe el <strong>nombre de la función</strong> de la vista, no la ruta. Si mañana cambias <code class="inline">/libros/&lt;id&gt;</code> por <code class="inline">/catalogo/&lt;id&gt;</code>, <em class="hl">no tocas ni una plantilla</em>.</p>
+    </section>
+
+    <!-- 14 · autoescape -->
+    <section class="slide" data-layer="plantilla">
+      <div class="eyebrow">Bloque 2 · Plantillas · seguridad</div>
+      <h2>Jinja te está protegiendo</h2>
+<pre><span class="c"># un usuario guarda este título de libro:</span>
+titulo = <span class="s">'&lt;script&gt;robarSesion()&lt;/script&gt;'</span>
+
+<span class="c"># Jinja lo imprime escapado, como texto inofensivo:</span>
+&amp;lt;script&amp;gt;robarSesion()&amp;lt;/script&amp;gt;</pre>
+      <div class="card warn">
+        <p style="margin:0">El filtro <code class="inline">|safe</code> <strong>desactiva</strong> esa protección y vuelve a habilitar <strong class="plum">XSS</strong>. Úsalo solo sobre HTML que generaste tú, nunca sobre algo que escribió un usuario.</p>
+      </div>
+      <p class="muted">Mismo principio que el <code class="inline">%s</code> de psycopg2: el peligro aparece cuando mezclas datos del usuario con código.</p>
+    </section>
+
+    <!-- 15 · formulario -->
+    <section class="slide" data-layer="peticion">
+      <div class="eyebrow">Bloque 3 · Formularios</div>
+      <h2>El atributo <code class="inline" style="font-size:.72em">name</code> es la llave</h2>
+<pre>&lt;form action="{{ url_for(<span class="s">'crear_libro'</span>) }}" method="<span class="k">POST</span>"&gt;
+  &lt;input type="text"   <span class="k">name</span>="titulo" required&gt;
+  &lt;input type="number" <span class="k">name</span>="anio"&gt;
+  &lt;select <span class="k">name</span>="autor_id"&gt;...&lt;/select&gt;
+  &lt;button type="submit"&gt;Guardar&lt;/button&gt;
+&lt;/form&gt;</pre>
+<pre>request.form[<span class="s">'titulo'</span>]           <span class="c"># KeyError si no vino → 400</span>
+request.form.get(<span class="s">'anio'</span>, <span class="s">''</span>)     <span class="c"># seguro, con valor por defecto</span></pre>
+      <p><strong>Sin <code class="inline">name</code>, el campo no se envía.</strong> El navegador lo ignora silenciosamente y en el servidor no aparece jamás.</p>
+    </section>
+
+    <!-- 16 · get vs post -->
+    <section class="slide" data-layer="peticion">
+      <div class="eyebrow">Bloque 3 · Formularios</div>
+      <h2>GET o POST: no es estilo, es semántica</h2>
+      <table>
+        <tr><th></th><th>GET</th><th>POST</th></tr>
+        <tr><td>Los datos van</td><td>en la URL <code class="inline">?autor=...</code></td><td>en el cuerpo</td></tr>
+        <tr><td>Se lee con</td><td class="num">request.args</td><td class="num">request.form</td></tr>
+        <tr><td>Queda en el historial</td><td>Sí</td><td>No</td></tr>
+        <tr><td>Se puede marcar</td><td>Sí</td><td>No</td></tr>
+        <tr class="key"><td>Debe usarse para</td><td><strong>leer</strong> y filtrar</td><td><strong>modificar</strong> el estado</td></tr>
+      </table>
+      <p class="muted" style="margin-top:16px">Buscar libros por autor → GET. Crear, editar o borrar → POST. Siempre.</p>
+    </section>
+
+    <!-- 17 · create -->
+    <section class="slide" data-layer="ruta">
+      <div class="eyebrow">Bloque 4 · CRUD</div>
+      <h2>CREATE — la ruta completa</h2>
+<pre><span class="n">@app.route</span>(<span class="s">'/libros/crear'</span>, methods=[<span class="s">'GET'</span>, <span class="s">'POST'</span>])
+<span class="k">def</span> crear_libro():
+  <span class="k">if</span> request.method == <span class="s">'GET'</span>:
+    <span class="k">return</span> render_template(<span class="s">'libros/formulario.html'</span>,
+                           autores=Autor.query.all())
+  <span class="k">try</span>:
+    l = Libro(
+      titulo=request.form[<span class="s">'titulo'</span>],
+      anio=request.form.get(<span class="s">'anio'</span>) <span class="k">or None</span>,
+      autor_id=request.form[<span class="s">'autor_id'</span>]
+    )
+    db.session.add(l)
+    db.session.commit()
+    flash(<span class="s">'Libro creado.'</span>, <span class="s">'exito'</span>)
+  <span class="k">except</span> Exception:
+    db.session.rollback()                <span class="c"># la transacción de la clase pasada</span>
+    flash(<span class="s">'No se pudo crear.'</span>, <span class="s">'error'</span>)
+  <span class="k">finally</span>:
+    db.session.close()
+
+  <span class="k">return</span> redirect(url_for(<span class="s">'listar_libros'</span>))</pre>
+    </section>
+
+    <!-- 18 · PRG -->
+    <section class="slide" data-layer="respuesta">
+      <div class="eyebrow">Bloque 4 · CRUD</div>
+      <h2>POST → Redirect → GET</h2>
+      <div class="flow">
+        <span class="n">POST /libros/crear</span><span class="a">→</span>
+        <span class="n">302 Redirect</span><span class="a">→</span>
+        <span class="n">GET /libros</span>
+      </div>
+      <p>Si respondes al POST con <code class="inline">render_template</code>, el navegador se queda "parado" sobre el POST. El usuario presiona <strong>F5</strong>… y crea el mismo libro otra vez.</p>
+      <div class="card warn">
+        <p style="margin:0">Con el redirect, la última petición del historial es un <strong>GET inofensivo</strong>. Recargar solo vuelve a listar.</p>
+      </div>
+      <p class="muted">Este patrón tiene nombre propio: <strong>Post/Redirect/Get</strong>. Es de los pocos que hay que aplicar siempre, sin pensarlo.</p>
+    </section>
+
+    <!-- 19 · flash -->
+    <section class="slide" data-layer="respuesta">
+      <div class="eyebrow">Bloque 4 · CRUD</div>
+      <h2>Avisarle al usuario qué pasó</h2>
+<pre><span class="c"># en app.py — necesario para firmar la sesión</span>
+app.secret_key = os.environ[<span class="s">'SECRET_KEY'</span>]
+
+flash(<span class="s">'Libro creado.'</span>, <span class="s">'exito'</span>)</pre>
+<pre><span class="c">&lt;!-- en layout.html --&gt;</span>
+{% <span class="k">with</span> mensajes = get_flashed_messages(with_categories=<span class="k">true</span>) %}
+  {% <span class="k">for</span> categoria, texto <span class="k">in</span> mensajes %}
+    &lt;div class="aviso {{ categoria }}"&gt;{{ texto }}&lt;/div&gt;
+  {% <span class="k">endfor</span> %}
+{% <span class="k">endwith</span> %}</pre>
+      <p class="muted">El mensaje sobrevive al redirect porque viaja en la sesión, y se consume una sola vez.</p>
+    </section>
+
+    <!-- 20 · read -->
+    <section class="slide" data-layer="ruta">
+      <div class="eyebrow">Bloque 4 · CRUD</div>
+      <h2>READ — listado y detalle</h2>
+<pre><span class="n">@app.route</span>(<span class="s">'/libros'</span>)
+<span class="k">def</span> listar_libros():
+  autor = request.args.get(<span class="s">'autor'</span>)              <span class="c"># ?autor=Kurose</span>
+  consulta = Libro.query
+  <span class="k">if</span> autor:
+    consulta = consulta.join(Autor).filter(Autor.nombre.ilike(<span class="s">f'%{autor}%'</span>))
+  <span class="k">return</span> render_template(<span class="s">'libros/index.html'</span>,
+                         libros=consulta.order_by(Libro.titulo).all())
+
+<span class="n">@app.route</span>(<span class="s">'/libros/&lt;int:libro_id&gt;'</span>)
+<span class="k">def</span> detalle_libro(libro_id):
+  l = Libro.query.get_or_404(libro_id)
+  <span class="k">return</span> render_template(<span class="s">'libros/detalle.html'</span>, libro=l)</pre>
+      <p class="muted"><code class="inline">get_or_404</code> reemplaza el <code class="inline">if ... is None: abort(404)</code> de la clase pasada. Y <code class="inline">&lt;int:libro_id&gt;</code>, que ya conocen, rechaza <code class="inline">/libros/abc</code> antes de tocar la base.</p>
+    </section>
+
+    <!-- 21 · update -->
+    <section class="slide" data-layer="ruta">
+      <div class="eyebrow">Bloque 4 · CRUD</div>
+      <h2>UPDATE — el objeto ya está vigilado</h2>
+<pre><span class="n">@app.route</span>(<span class="s">'/libros/&lt;int:libro_id&gt;/editar'</span>, methods=[<span class="s">'GET'</span>, <span class="s">'POST'</span>])
+<span class="k">def</span> editar_libro(libro_id):
+  l = Libro.query.get_or_404(libro_id)
+
+  <span class="k">if</span> request.method == <span class="s">'GET'</span>:
+    <span class="k">return</span> render_template(<span class="s">'libros/formulario.html'</span>, libro=l,
+                           autores=Autor.query.all())
+
+  l.titulo = request.form[<span class="s">'titulo'</span>]      <span class="c"># solo asignas atributos</span>
+  l.anio   = request.form.get(<span class="s">'anio'</span>) <span class="k">or None</span>
+  db.session.commit()                     <span class="c"># el ORM genera el UPDATE</span>
+
+  <span class="k">return</span> redirect(url_for(<span class="s">'detalle_libro'</span>, libro_id=l.id))</pre>
+      <p>No hay <code class="inline">db.session.add()</code>: el objeto vino de una consulta, así que <em class="hl">la sesión ya lo está vigilando</em> y detecta el cambio sola.</p>
+    </section>
+
+    <!-- 22 · formulario reutilizado -->
+    <section class="slide" data-layer="plantilla">
+      <div class="eyebrow">Bloque 4 · CRUD</div>
+      <h2>Un solo formulario para crear y editar</h2>
+<pre>&lt;form method="POST" action="{{ url_for(<span class="s">'editar_libro'</span>, libro_id=libro.id)
+                              <span class="k">if</span> libro <span class="k">else</span> url_for(<span class="s">'crear_libro'</span>) }}"&gt;
+
+  &lt;input name="titulo" value="{{ libro.titulo <span class="k">if</span> libro <span class="k">else</span> <span class="s">''</span> }}"&gt;
+  &lt;input name="anio"   value="{{ libro.anio <span class="k">if</span> libro <span class="k">else</span> <span class="s">''</span> }}"&gt;
+
+  &lt;button&gt;{{ <span class="s">'Guardar cambios'</span> <span class="k">if</span> libro <span class="k">else</span> <span class="s">'Crear'</span> }}&lt;/button&gt;
+&lt;/form&gt;</pre>
+      <p class="muted">Jinja permite expresiones condicionales dentro de <code class="inline">{{ }}</code>. Es el mismo <code class="inline">a if cond else b</code> de Python.</p>
+    </section>
+
+    <!-- 23 · delete -->
+    <section class="slide" data-layer="ruta">
+      <div class="eyebrow">Bloque 4 · CRUD</div>
+      <h2>DELETE — jamás con un enlace</h2>
+<pre><span class="c">&lt;!-- ❌ el navegador o un buscador pueden visitarlo solos --&gt;</span>
+&lt;a href="/libros/42/eliminar"&gt;Eliminar&lt;/a&gt;
+
+<span class="c">&lt;!-- ✅ un POST explícito, disparado por una persona --&gt;</span>
+&lt;form method="POST"
+      action="{{ url_for(<span class="s">'eliminar_libro'</span>, libro_id=l.id) }}"&gt;
+  &lt;button onclick="<span class="k">return</span> confirm('¿Eliminar {{ l.titulo }}?')"&gt;Eliminar&lt;/button&gt;
+&lt;/form&gt;</pre>
+<pre>db.session.delete(l)
+db.session.commit()</pre>
+      <p class="muted">Ya lo discutimos en la Clase 2 con la API: aquella vez era un rastreador borrando registros. Con plantillas el riesgo es el mismo, pero ahora hay enlaces visibles.</p>
+    </section>
+
+    <!-- 24 · tabla CRUD -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Bloque 4 · CRUD</div>
+      <h2>Tres vocabularios, una sola idea</h2>
+      <table>
+        <tr><th>Operación</th><th>Verbo HTTP</th><th>SQL</th><th>SQLAlchemy</th></tr>
+        <tr class="key"><td><strong>Create</strong></td><td class="num">POST</td><td class="num">INSERT</td><td class="num">db.session.add()</td></tr>
+        <tr><td><strong>Read</strong></td><td class="num">GET</td><td class="num">SELECT</td><td class="num">Model.query...</td></tr>
+        <tr><td><strong>Update</strong></td><td class="num">POST</td><td class="num">UPDATE</td><td class="num">obj.attr = ...</td></tr>
+        <tr><td><strong>Delete</strong></td><td class="num">POST</td><td class="num">DELETE</td><td class="num">db.session.delete()</td></tr>
+      </table>
+      <p style="margin-top:18px">Los cuatro terminan igual: <code class="inline">db.session.commit()</code>. Es decir, un <code class="inline">COMMIT</code> por el puerto 5432 — <em class="hl">exactamente lo de la clase pasada</em>.</p>
+    </section>
+
+    <!-- 25 · errores -->
+    <section class="slide" data-layer="respuesta">
+      <div class="eyebrow">Bloque 4 · Errores</div>
+      <h2>Que el error también sea tuyo</h2>
+<pre><span class="n">@app.errorhandler</span>(<span class="n">404</span>)
+<span class="k">def</span> no_encontrado(error):
+  <span class="k">return</span> render_template(<span class="s">'errores/404.html'</span>), <span class="n">404</span>
+
+<span class="n">@app.errorhandler</span>(<span class="n">500</span>)
+<span class="k">def</span> error_servidor(error):
+  db.session.rollback()          <span class="c"># deja la sesión limpia</span>
+  <span class="k">return</span> render_template(<span class="s">'errores/500.html'</span>), <span class="n">500</span></pre>
+      <p>Fíjense en el <strong>segundo valor de retorno</strong>: es el código de estado. Sin él responderías <code class="inline">200 OK</code> con una página que dice "no encontrado" — mentirle al navegador y a los buscadores.</p>
+    </section>
+
+    <!-- 26 · N+1 -->
+    <section class="slide" data-layer="modelo">
+      <div class="eyebrow">Bloque 4 · Rendimiento</div>
+      <h2>El SQL que no ves: N+1</h2>
+<pre>{% <span class="k">for</span> l <span class="k">in</span> libros %}
+  {{ l.titulo }} — {{ l.autor.nombre }}      <span class="c">← una consulta por cada libro</span>
+{% <span class="k">endfor</span> %}</pre>
+      <p>Con 50 libros: <strong class="plum">1 consulta + 50 consultas</strong>. La página funciona, se ve bien… y tarda dos segundos.</p>
+<pre><span class="c"># una sola consulta, con JOIN</span>
+Libro.query.options(db.joinedload(Libro.autor)).all()</pre>
+      <div class="card accent">
+        <p style="margin:0" class="muted">Enciendan <code class="inline">SQLALCHEMY_ECHO = True</code> y <strong>cuenten las líneas</strong> al cargar el listado. Es la demostración más contundente de por qué hay que saber qué SQL genera el ORM.</p>
+      </div>
+    </section>
+
+    <!-- 27 · checklist -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Síntesis</div>
+      <h2>Checklist de una ruta bien escrita</h2>
+      <ul class="bullets">
+        <li>¿El verbo corresponde? <strong>Lectura → GET, escritura → POST.</strong></li>
+        <li>¿Los datos se leen de <code class="inline">request.form</code> o <code class="inline">request.args</code>, según el verbo?</li>
+        <li>¿Hay <code class="inline">try / except / rollback / finally</code> alrededor del commit?</li>
+        <li>¿Termina en <code class="inline">redirect</code> si modificó algo?</li>
+        <li>¿Usa <code class="inline">url_for</code> en vez de rutas escritas a mano?</li>
+        <li>¿Devuelve el <strong>código de estado</strong> correcto?</li>
+      </ul>
+    </section>
+
+    <!-- 28 · errores frecuentes -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Síntesis</div>
+      <h2>Los seis errores de esta semana</h2>
+      <table>
+        <tr><th>Síntoma</th><th>Causa</th></tr>
+        <tr><td>El campo llega vacío</td><td>al <code class="inline">&lt;input&gt;</code> le falta <code class="inline">name</code></td></tr>
+        <tr><td class="num">405 Method Not Allowed</td><td>la ruta no declara <code class="inline">methods=['POST']</code></td></tr>
+        <tr><td>F5 duplica registros</td><td>falta el <code class="inline">redirect</code> después del POST</td></tr>
+        <tr><td class="num">TemplateNotFound</td><td>la plantilla no está bajo <code class="inline">templates/</code></td></tr>
+        <tr><td>El HTML aparece como texto</td><td>se imprimió con <code class="inline">{{ }}</code> algo que era HTML</td></tr>
+        <tr><td>La sesión queda trabada</td><td>hubo excepción y nunca se hizo <code class="inline">rollback()</code></td></tr>
+      </table>
+    </section>
+
+    <!-- 29 · la tarea · portada -->
+    <section class="slide cover" data-layer="">
+      <div class="eyebrow">Bloque 5 · La tarea</div>
+      <div class="rule"></div>
+      <h1 style="font-size:clamp(28px,4.8vw,62px)">La Carta</h1>
+      <p class="lead" style="max-width:48ch">Una aplicación de <strong>restaurantes y sus platos</strong>, construida por ustedes con lo que vimos hoy sobre la biblioteca.</p>
+      <div class="meta">
+        MISMA ESTRUCTURA · DOMINIO DISTINTO · SIN CÓDIGO DE PARTIDA
+      </div>
+    </section>
+
+    <!-- 30 · traducción -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Bloque 5 · La tarea</div>
+      <h2>Lo que vieron hoy ↔ lo que deben hacer</h2>
+      <table>
+        <tr><th>Ejemplo de clase</th><th>Su tarea</th></tr>
+        <tr><td>Autor <span class="muted">1 — N</span> Libro</td><td>Restaurante <span class="muted">1 — N</span> Plato</td></tr>
+        <tr><td class="num">/libros</td><td class="num">/restaurantes</td></tr>
+        <tr><td class="num">/libros/&lt;int:libro_id&gt;</td><td class="num">/restaurantes/&lt;int:restaurante_id&gt;</td></tr>
+        <tr><td>título · año · disponible</td><td>nombre del plato · precio · disponible</td></tr>
+        <tr class="key"><td>Yo lo escribí en la pizarra</td><td><strong>Ustedes lo escriben desde la especificación</strong></td></tr>
+      </table>
+      <p class="muted" style="margin-top:16px">La estructura es idéntica a propósito. Si entendieron el mecanismo, traducirlo es directo; si copiaron, se nota de inmediato.</p>
+    </section>
+
+    <!-- 31 · especificación -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Bloque 5 · Especificación</div>
+      <h2>Qué debe hacer La Carta</h2>
+      <table>
+        <tr><th>#</th><th>Requisito</th><th>Verbo · Ruta</th></tr>
+        <tr><td class="num">1</td><td>Listar restaurantes con su ciudad y su cantidad de platos</td><td class="num">GET /restaurantes</td></tr>
+        <tr><td class="num">2</td><td>Filtrar el listado por ciudad</td><td class="num">GET ?ciudad=</td></tr>
+        <tr><td class="num">3</td><td>Ver el detalle de un restaurante con sus platos</td><td class="num">GET /restaurantes/&lt;id&gt;</td></tr>
+        <tr><td class="num">4</td><td>Alta de restaurante mediante formulario</td><td class="num">GET + POST /crear</td></tr>
+        <tr><td class="num">5</td><td>Edición de un restaurante existente</td><td class="num">GET + POST /editar</td></tr>
+        <tr><td class="num">6</td><td>Baja de restaurante, con sus platos en cascada</td><td class="num">POST /eliminar</td></tr>
+        <tr><td class="num">7</td><td>Agregar un plato desde el detalle del restaurante</td><td class="num">POST /platos</td></tr>
+        <tr><td class="num">8</td><td>Páginas propias de error 404 y 500</td><td class="num">errorhandler</td></tr>
+      </table>
+    </section>
+
+    <!-- 32 · criterios -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Bloque 5 · Cómo se evalúa</div>
+      <h2>Lo que voy a mirar</h2>
+      <ul class="bullets">
+        <li><strong>Herencia de plantillas:</strong> un solo <code class="inline">layout.html</code>; ninguna plantilla repite el <code class="inline">&lt;head&gt;</code>.</li>
+        <li><strong>Cero rutas escritas a mano:</strong> todo enlace y todo <code class="inline">action</code> pasa por <code class="inline">url_for</code>.</li>
+        <li><strong>Post/Redirect/Get</strong> en las tres operaciones de escritura.</li>
+        <li><strong>Transacciones:</strong> <code class="inline">try / except / rollback / finally</code> donde haya <code class="inline">commit</code>.</li>
+        <li><strong>Códigos de estado correctos</strong>, incluido el 404 de un restaurante inexistente.</li>
+        <li><strong>Defensa oral:</strong> les voy a pedir que expliquen una línea cualquiera de su código.</li>
+      </ul>
+      <p class="muted" style="margin-top:14px">No entrego esqueleto de código. La especificación de arriba es el contrato; el diseño de la solución es suyo.</p>
+    </section>
+
+
+    <!-- d1 · intro -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Bloque 5 · Entrega</div>
+      <h2>Dos servicios, un solo comando</h2>
+      <p class="lead">Instalar Python, PostgreSQL y las dependencias a mano funciona… hasta que otra persona intenta reproducir su entorno.</p>
+      <div class="grid2">
+        <div class="card">
+          <h3>Imagen</h3>
+          <p class="muted" style="margin:0">La receta congelada: sistema base, dependencias y código. Se construye una vez.</p>
+        </div>
+        <div class="card">
+          <h3>Contenedor</h3>
+          <p class="muted" style="margin:0">Una instancia de esa imagen corriendo. <strong>Efímero</strong>: si lo borran, se va con todo lo de adentro.</p>
+        </div>
+      </div>
+      <p style="margin-top:18px">Compose describe el entorno como <em class="hl">archivos versionados en el repositorio</em>. La Carta tendrá <strong>dos servicios</strong>.</p>
+    </section>
+
+    <!-- d2 · arquitectura -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Bloque 5 · Entrega</div>
+      <h2>Cómo se ven los dos servicios</h2>
+<pre>┌──────────── red interna de Compose ─────────────┐
+│                                                 │
+│   servicio: <span class="k">web</span>            servicio: <span class="k">db</span>       │
+│   Flask                    PostgreSQL           │
+│   escucha en 8000  ──────▶ escucha en 5432      │
+│                                                 │
+└──────────────────┬──────────────────────────────┘
+                   │ solo web se publica al host
+           http://IP-PUBLICA:8000</pre>
+      <p><code class="inline">db</code> <strong>no lleva</strong> <code class="inline">ports</code>: solo la usa <code class="inline">web</code>, por la red interna. Publicarla sería <em class="hl">exponer la base de datos a Internet</em>.</p>
+    </section>
+
+    <!-- d3 · dockerfile -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Bloque 5 · Entrega</div>
+      <h2>El Dockerfile de la aplicación</h2>
+<pre><span class="k">FROM</span> python:3.11-slim
+
+<span class="k">WORKDIR</span> /app
+
+<span class="c"># las dependencias primero: si no cambian, Docker reutiliza la capa</span>
+<span class="k">COPY</span> requirements.txt .
+<span class="k">RUN</span> pip install --no-cache-dir -r requirements.txt
+
+<span class="k">COPY</span> . .
+
+<span class="k">EXPOSE</span> 8000
+<span class="k">CMD</span> ["python", "app.py"]</pre>
+      <p class="muted">Si copiaran todo junto en un solo <code class="inline">COPY</code>, cambiar una línea de código reinstalaría todas las dependencias en cada build.</p>
+    </section>
+
+    <!-- d4 · compose -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Bloque 5 · Entrega</div>
+      <h2>docker-compose.yml</h2>
+<pre><span class="n">services</span>:
+  <span class="k">db</span>:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: lacarta
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - datos_pg:/var/lib/postgresql/data      <span class="c"># los datos sobreviven</span>
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lacarta"]
+
+  <span class="k">web</span>:
+    build: .
+    ports:
+      - "8000:8000"                            <span class="c"># el único publicado</span>
+    environment:
+      DATABASE_URL: postgresql://lacarta:${POSTGRES_PASSWORD}@<span class="s">db</span>:5432/lacarta
+    depends_on:
+      db: { condition: service_healthy }
+
+<span class="n">volumes</span>:
+  datos_pg:</pre>
+    </section>
+
+    <!-- d5 · db no es localhost -->
+    <section class="slide" data-layer="peticion">
+      <div class="eyebrow">Bloque 5 · Entrega</div>
+      <h2>Dentro del contenedor, <code class="inline" style="font-size:.72em">localhost</code> es otro</h2>
+<pre>postgresql://lacarta:clave@<span class="s">db</span>:<span class="s">5432</span>/lacarta
+                           <span class="c">└┬┘ └─┬┘
+                    nombre del  puerto
+                     servicio</span></pre>
+      <p>Cada contenedor tiene su propia interfaz de red. Dentro de <code class="inline">web</code>, <code class="inline">localhost</code> es <strong>el propio contenedor web</strong>, donde no hay ninguna base de datos.</p>
+      <div class="card accent">
+        <p style="margin:0">Compose crea una red interna donde <strong>el nombre del servicio es el nombre de host</strong>. Sigue siendo <em class="hl">dirección + puerto</em>: solo cambia cómo se resuelve la dirección.</p>
+      </div>
+    </section>
+
+    <!-- d6 · trampas y comandos -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Bloque 5 · Entrega</div>
+      <h2>Dos trampas y seis comandos</h2>
+      <table>
+        <tr><th>Trampa</th><th>Qué pasa sin eso</th></tr>
+        <tr><td class="num">volumes: datos_pg</td><td>Un <code class="inline">down</code> se lleva todos los restaurantes cargados</td></tr>
+        <tr><td class="num">healthcheck</td><td><code class="inline">depends_on</code> solo ordena el arranque, no espera a que Postgres acepte conexiones: la app arranca, no encuentra la base y muere</td></tr>
+      </table>
+<pre>docker compose up -d --build     <span class="c"># construir y levantar</span>
+docker compose ps                <span class="c"># ¿están los dos arriba?</span>
+docker compose logs -f web       <span class="c"># seguir los registros</span>
+docker compose exec web bash     <span class="c"># entrar al contenedor</span>
+docker compose down              <span class="c"># bajar (los datos quedan)</span>
+docker compose down -v           <span class="c"># bajar y BORRAR el volumen</span></pre>
+    </section>
+
+    <!-- d7 · en EC2 -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Bloque 5 · Entrega</div>
+      <h2>El mismo puerto, otro inquilino</h2>
+      <div class="flow">
+        <span class="n">Security Group :8000</span><span class="a">→</span>
+        <span class="n">contenedor web</span><span class="a">→</span>
+        <span class="n">red interna</span><span class="a">→</span>
+        <span class="n">contenedor db</span>
+      </div>
+      <p>La regla del <em class="hl">Security Group no cambia</em>: el 8000 ya está abierto. Lo único distinto es quién escucha detrás — antes un proceso de Python, ahora un contenedor.</p>
+<pre>sudo apt install -y docker.io docker-compose-v2
+sudo usermod -aG docker ubuntu     <span class="c"># salir de SSH y volver a entrar</span>
+git clone git@github.com:usuario/la-carta.git &amp;&amp; cd la-carta
+nano .env                          <span class="c"># las claves NO van al repositorio</span>
+docker compose up -d --build</pre>
+      <p class="muted">Su repositorio ahora alcanza para reproducir el entorno completo: clonar, crear el <code class="inline">.env</code>, un comando.</p>
+    </section>
+
+    <!-- 33 · lo que viene -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">La próxima clase</div>
+      <h2>Un problema que ya tenemos</h2>
+      <p class="lead">Hoy agregamos la columna <code class="inline">disponible</code> a <code class="inline">Libro</code>. <code class="inline">db.create_all()</code> <strong>no la creó</strong>: solo crea tablas que no existen.</p>
+      <div class="flow">
+        <span class="n">db.create_all()</span><span class="a">no alcanza →</span>
+        <span class="n">migraciones</span>
+      </div>
+      <p>Borrar la base cada vez que cambia un modelo funciona en tu máquina. En producción, con datos reales, <em class="hl">no es una opción</em>.</p>
+      <p class="muted">La próxima clase: <strong>Flask-Migrate y Alembic</strong> — versionar el esquema como versionamos el código.</p>
+    </section>
+
+    <!-- 34 · cierre -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Cierre</div>
+      <h2>La idea de hoy en una línea</h2>
+      <div class="stack">
+        <div class="s"><b>PostgreSQL</b><span>guarda las filas</span></div>
+        <div class="s"><b>Modelo</b><span>las convierte en objetos</span></div>
+        <div class="s"><b>Ruta</b><span>decide qué objetos y qué hacer con ellos</span></div>
+        <div class="s"><b>Plantilla</b><span>los convierte en HTML</span></div>
+        <div class="s hi"><b>Navegador</b><span>los convierte en algo que una persona entiende</span></div>
+      </div>
+      <p style="margin-top:20px">Cada capa hace <em class="hl">una sola cosa</em>. Cuando algo falla, esa separación es la que te dice dónde mirar.</p>
+    </section>
+
+  </main>
+</div>
+
+<div class="bar" id="bar"></div>
+<div class="hud">
+  <button id="prev" aria-label="Anterior">←</button>
+  <button id="next" aria-label="Siguiente">→</button>
+  <span class="count" id="count">1 / 1</span>
+</div>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var layers = Array.prototype.slice.call(document.querySelectorAll('.layer'));
+  var order  = ['peticion','ruta','modelo','plantilla','respuesta'];
+  var i = 0;
+
+  function paintSpine(key){
+    var idx = order.indexOf(key);
+    layers.forEach(function(el){
+      var k = el.getAttribute('data-l');
+      var p = order.indexOf(k);
+      el.classList.remove('on','done');
+      if(idx === -1) return;
+      if(p < idx) el.classList.add('done');
+      if(p === idx) el.classList.add('on');
+    });
+  }
+
+  function show(n){
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function(s, k){ s.classList.toggle('active', k === i); });
+    slides[i].scrollTop = 0;
+    paintSpine(slides[i].getAttribute('data-layer') || '');
+    document.getElementById('count').textContent = (i + 1) + ' / ' + slides.length;
+    document.getElementById('bar').style.width = ((i) / (slides.length - 1) * 100) + '%';
+    try { location.hash = i + 1; } catch(e){}
+  }
+
+  document.getElementById('next').addEventListener('click', function(){ show(i + 1); });
+  document.getElementById('prev').addEventListener('click', function(){ show(i - 1); });
+
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' '){ e.preventDefault(); show(i + 1); }
+    else if(e.key === 'ArrowLeft' || e.key === 'PageUp'){ e.preventDefault(); show(i - 1); }
+    else if(e.key === 'Home'){ show(0); }
+    else if(e.key === 'End'){ show(slides.length - 1); }
+    else if(e.key === 'f' || e.key === 'F'){
+      if(!document.fullscreenElement){ document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); }
+      else { document.exitFullscreen(); }
+    }
+  });
+
+  var x0 = null;
+  document.addEventListener('touchstart', function(e){ x0 = e.changedTouches[0].clientX; }, {passive:true});
+  document.addEventListener('touchend', function(e){
+    if(x0 === null) return;
+    var dx = e.changedTouches[0].clientX - x0;
+    if(Math.abs(dx) > 60){ show(dx < 0 ? i + 1 : i - 1); }
+    x0 = null;
+  }, {passive:true});
+
+  var start = parseInt((location.hash || '').replace('#',''), 10);
+  show(isNaN(start) ? 0 : start - 1);
+})();
+</script>
+</body>
+</html>
