@@ -29,7 +29,7 @@ def inicio():
 @app.route('/libros')
 def listar_libros():
     """GET /libros  →  catalogo en HTML. Acepta ?autor=... para filtrar."""
-    autor = request.args.get('autor', '')      # lectura → request.args
+    autor = request.args.get('autor', '')
     consulta = Libro.query
 
     if autor:
