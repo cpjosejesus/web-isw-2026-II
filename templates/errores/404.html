@@ -1,0 +1,9 @@
+{% extends 'layout.html' %}
+
+{% block titulo %}No encontrado{% endblock %}
+
+{% block contenido %}
+  <h1>404 — No encontrado</h1>
+  <p>El recurso que buscas no existe o fue eliminado.</p>
+  <a href="{{ url_for('listar_libros') }}">&larr; Volver al catalogo</a>
+{% endblock %}

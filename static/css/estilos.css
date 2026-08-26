@@ -93,3 +93,7 @@ footer {
   border-radius: 3px;
   text-decoration: none;
 }
+
+.acciones { display: flex; align-items: center; gap: .8rem; margin: 1.5rem 0; }
+.en-linea { display: inline; }
+.en-linea button { background: #a33; border-color: #a33; }
