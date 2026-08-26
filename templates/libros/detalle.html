@@ -1,0 +1,24 @@
+{% extends 'layout.html' %}
+
+{% block titulo %}{{ libro.titulo }}{% endblock %}
+
+{% block contenido %}
+  <h1>{{ libro.titulo }}</h1>
+
+  <dl class="ficha">
+    <dt>Autor</dt>
+    <dd>
+      <a href="{{ url_for('detalle_autor', autor_id=libro.autor.id) }}">
+        {{ libro.autor.nombre }}
+      </a>
+    </dd>
+
+    <dt>Anio</dt>
+    <dd>{{ libro.anio if libro.anio else 'sin dato' }}</dd>
+
+    <dt>Estado</dt>
+    <dd>{{ 'Disponible' if libro.disponible else 'Prestado' }}</dd>
+  </dl>
+
+  <a href="{{ url_for('listar_libros') }}">&larr; Volver al catalogo</a>
+{% endblock %}

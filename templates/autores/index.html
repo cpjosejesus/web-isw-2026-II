@@ -1,0 +1,21 @@
+{% extends 'layout.html' %}
+
+{% block titulo %}Autores{% endblock %}
+
+{% block contenido %}
+  <h1>Autores</h1>
+
+  <ul class="listado">
+    {% for a in autores %}
+      <li>
+        <a href="{{ url_for('detalle_autor', autor_id=a.id) }}">
+          <strong>{{ a.nombre }}</strong>
+        </a>
+        {% if a.nacionalidad %}<span class="anio">({{ a.nacionalidad }})</span>{% endif %}
+        — {{ a.libros|length }} libro{{ '' if a.libros|length == 1 else 's' }}
+      </li>
+    {% else %}
+      <li class="vacio">Todavia no hay autores cargados.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}

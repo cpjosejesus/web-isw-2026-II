@@ -1,0 +1,22 @@
+{% extends 'layout.html' %}
+
+{% block titulo %}{{ autor.nombre }}{% endblock %}
+
+{% block contenido %}
+  <h1>{{ autor.nombre }}</h1>
+  <p class="anio">{{ autor.nacionalidad if autor.nacionalidad else 'Sin nacionalidad registrada' }}</p>
+
+  <h2>Sus libros</h2>
+  <ul class="listado">
+    {% for l in autor.libros %}
+      <li>
+        <a href="{{ url_for('detalle_libro', libro_id=l.id) }}">{{ l.titulo }}</a>
+        {% if not l.disponible %}<em>(prestado)</em>{% endif %}
+      </li>
+    {% else %}
+      <li class="vacio">Este autor todavia no tiene libros.</li>
+    {% endfor %}
+  </ul>
+
+  <a href="{{ url_for('listar_autores') }}">&larr; Volver a autores</a>
+{% endblock %}

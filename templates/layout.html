@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- url_for('static', ...) tambien vale para los archivos estaticos -->
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/estilos.css') }}" />
+    <title>{% block titulo %}Biblioteca{% endblock %}</title>
+  </head>
+  <body>
+    <nav>
+      <a class="marca" href="{{ url_for('listar_libros') }}">Biblioteca</a>
+      <a href="{{ url_for('listar_libros') }}">Libros</a>
+      <a href="{{ url_for('listar_autores') }}">Autores</a>
+    </nav>
+
+    <main>
+      {% block contenido %}{% endblock %}
+    </main>
+
+    <footer>ISW-233 · Aplicaciones Web I</footer>
+  </body>
+</html>

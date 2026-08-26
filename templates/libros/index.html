@@ -1,0 +1,29 @@
+{% extends 'layout.html' %}
+
+{% block titulo %}Libros{% endblock %}
+
+{% block contenido %}
+  <h1>Catalogo</h1>
+
+  <form method="GET" action="{{ url_for('listar_libros') }}" class="filtro">
+    <input type="text" name="autor" value="{{ filtro_autor }}"
+           placeholder="Filtrar por autor" />
+    <button type="submit">Buscar</button>
+  </form>
+
+  <ul class="listado">
+    {% for l in libros %}
+      <li>
+        <a href="{{ url_for('detalle_libro', libro_id=l.id) }}">
+          <strong>{{ l.titulo }}</strong>
+        </a>
+        — {{ l.autor.nombre }}
+        {% if l.anio %}<span class="anio">({{ l.anio }})</span>{% endif %}
+        {% if not l.disponible %}<em>(prestado)</em>{% endif %}
+      </li>
+    {% else %}
+      {# el else del for corre cuando la lista viene vacia #}
+      <li class="vacio">Todavia no hay libros cargados.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}
