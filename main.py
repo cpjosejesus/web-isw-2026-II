@@ -16,7 +16,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'postgresql+psycopg://biblioteca:biblioteca@localhost:5432/biblioteca'
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# Necesaria para firmar la sesion, que es donde viajan los mensajes flash.
 app.secret_key = os.environ.get('SECRET_KEY', 'clave-de-desarrollo')
 
 db.init_app(app)
@@ -31,15 +30,13 @@ def inicio():
 @app.route('/libros')
 def listar_libros():
     """GET /libros  →  catalogo en HTML. Acepta ?autor=... para filtrar."""
-    autor = request.args.get('autor', '')      # lectura → request.args
+    autor = request.args.get('autor', '')
     consulta = Libro.query
 
     if autor:
         consulta = consulta.join(Autor).filter(
             Autor.nombre.ilike(f'%{autor}%'))
 
-    # joinedload trae el autor en la misma consulta. Sin esto, la plantilla
-    # dispara una consulta por cada libro al leer l.autor.nombre: el N+1.
     consulta = consulta.options(db.joinedload(Libro.autor))
 
     return render_template(
@@ -66,10 +63,9 @@ def crear_libro():
 
     try:
         libro = Libro(
-            titulo=request.form['titulo'],          # KeyError → 400 si falta
-            anio=request.form.get('anio') or None,  # seguro, con default
+            titulo=request.form['titulo'],
+            anio=request.form.get('anio') or None,
             autor_id=request.form['autor_id'],
-            # un checkbox sin marcar no se envia: por eso 'in request.form'
             disponible='disponible' in request.form,
         )
         db.session.add(libro)
@@ -79,7 +75,6 @@ def crear_libro():
         db.session.rollback()
         flash('No se pudo crear el libro.', 'error')
 
-    # Post/Redirect/Get: nunca render_template como respuesta a un POST.
     return redirect(url_for('listar_libros'))
 
 
@@ -94,8 +89,6 @@ def editar_libro(libro_id):
                                autores=Autor.query.order_by(Autor.nombre).all())
 
     try:
-        # No hay db.session.add(): el objeto vino de una consulta, asi que
-        # la sesion ya lo vigila y detecta el cambio sola.
         libro.titulo = request.form['titulo']
         libro.anio = request.form.get('anio') or None
         libro.autor_id = request.form['autor_id']
@@ -141,14 +134,12 @@ def detalle_autor(autor_id):
 
 @app.errorhandler(404)
 def no_encontrado(error):
-    # El segundo valor es el codigo de estado. Sin el responderias 200 OK
-    # con una pagina que dice "no encontrado".
     return render_template('errores/404.html'), 404
 
 
 @app.errorhandler(500)
 def error_servidor(error):
-    db.session.rollback()          # deja la sesion limpia
+    db.session.rollback()
     return render_template('errores/500.html'), 500
 
 

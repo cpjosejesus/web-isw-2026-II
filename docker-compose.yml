@@ -6,7 +6,6 @@ services:
       POSTGRES_USER: biblioteca
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      # Sin este volumen, un `docker compose down` se lleva todos los datos.
       - datos_pg:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U biblioteca -d biblioteca"]
@@ -17,16 +16,11 @@ services:
   web:
     build: .
     ports:
-      - "8000:8000"          # el unico servicio publicado al host
+      - "8000:8000"
     environment:
-      # `db` es el nombre del servicio, y dentro de la red de Compose
-      # el nombre del servicio es el nombre de host. localhost aqui
-      # seria el propio contenedor web, donde no hay ninguna base.
       DATABASE_URL: postgresql+psycopg://biblioteca:${POSTGRES_PASSWORD}@db:5432/biblioteca
       SECRET_KEY: ${SECRET_KEY}
     depends_on:
-      # depends_on solo ordena el arranque; el healthcheck es lo que
-      # espera a que Postgres acepte conexiones.
       db:
         condition: service_healthy
 

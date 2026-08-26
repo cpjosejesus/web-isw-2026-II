@@ -5,7 +5,6 @@
 {% block contenido %}
   <h1>{{ 'Editar libro' if libro else 'Nuevo libro' }}</h1>
 
-  {# Un solo formulario para crear y editar: cambia el action y los valores #}
   <form method="POST" class="formulario"
         action="{{ url_for('editar_libro', libro_id=libro.id) if libro
                   else url_for('crear_libro') }}">
