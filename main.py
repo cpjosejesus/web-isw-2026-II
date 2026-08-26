@@ -16,7 +16,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'postgresql+psycopg://app:123qwe@localhost:5433/store'
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# Necesaria para firmar la sesion, que es donde viajan los mensajes flash.
 app.secret_key = os.environ.get('SECRET_KEY', 'clave-de-desarrollo')
 
 db.init_app(app)
@@ -31,7 +30,7 @@ def inicio():
 @app.route('/libros')
 def listar_libros():
     """GET /libros  →  catalogo en HTML. Acepta ?autor=... para filtrar."""
-    autor = request.args.get('autor', '')      # lectura → request.args
+    autor = request.args.get('autor', '')
     consulta = Libro.query
 
     if autor:
@@ -62,10 +61,9 @@ def crear_libro():
 
     try:
         libro = Libro(
-            titulo=request.form['titulo'],          # KeyError → 400 si falta
-            anio=request.form.get('anio') or None,  # seguro, con default
+            titulo=request.form['titulo'],
+            anio=request.form.get('anio') or None,
             autor_id=request.form['autor_id'],
-            # un checkbox sin marcar no se envia: por eso 'in request.form'
             disponible='disponible' in request.form,
         )
         db.session.add(libro)
@@ -75,7 +73,6 @@ def crear_libro():
         db.session.rollback()
         flash('No se pudo crear el libro.', 'error')
 
-    # Post/Redirect/Get: nunca render_template como respuesta a un POST.
     return redirect(url_for('listar_libros'))
 
 

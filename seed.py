@@ -56,7 +56,6 @@ def main():
         print('Tablas `autores` y `libros` listas.')
 
         if reset:
-            # Borrar el autor arrastra sus libros por la cascada.
             for autor in Autor.query.all():
                 db.session.delete(autor)
             db.session.commit()
