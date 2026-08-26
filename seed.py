@@ -31,7 +31,6 @@ def generar_personas(cantidad=50):
         apellido = APELLIDOS[(i * 7) % len(APELLIDOS)]
         nombre_completo = f'{nombre} {apellido}'
 
-        # El nombre es UNIQUE en la tabla: si se repite, agregamos un sufijo.
         if any(p.name == nombre_completo for p in personas):
             nombre_completo = f'{nombre_completo} {i}'
 
