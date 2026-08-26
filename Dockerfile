@@ -1,12 +1,14 @@
-FROM ubuntu:22.04
+FROM python:3.11-slim
 
-RUN apt-get update && apt-get install -y nano 
-RUN apt-get install -y python3 python3-pip
-RUN pip3 install flask
+WORKDIR /app
 
-COPY . /site/
+# Las dependencias primero: si no cambian, Docker reutiliza esta capa.
+# Copiar todo junto reinstalaria todo con cada cambio de codigo.
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-EXPOSE 5005
+COPY . .
 
-CMD [ "python3", "/site/app.py" ]
+EXPOSE 8000
 
+CMD ["python", "app.py"]

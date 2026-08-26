@@ -13,7 +13,7 @@ from models import db, Autor, Libro
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL',
-    'postgresql+psycopg://app:123qwe@localhost:5433/store'
+    'postgresql+psycopg://biblioteca:biblioteca@localhost:5432/biblioteca'
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Necesaria para firmar la sesion, que es donde viajan los mensajes flash.
