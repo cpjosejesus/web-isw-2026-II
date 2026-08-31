@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paso 1 - Nginx sirviendo archivos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E4E7E2;
+    --paper-2:#DADFD9;
+    --ink:#10201F;
+    --ink-soft:rgba(16,32,31,.62);
+    --teal:#0E6560;
+    --plum:#7A2A55;
+    --amber:#C98A0E;
+    --rule:rgba(16,32,31,.16);
+    --spine-w:200px;
+    --pad:clamp(20px,4.2vw,72px);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    font-size:16px;
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+  /* ---------- estructura ---------- */
+  .deck{display:flex;height:100vh;height:100dvh;width:100%}
+  .spine{
+    width:var(--spine-w);flex:0 0 var(--spine-w);
+    border-right:1px solid var(--rule);
+    padding:var(--pad) 0 0 clamp(14px,2vw,26px);
+    display:flex;flex-direction:column;justify-content:flex-end;
+    padding-bottom:clamp(18px,3vw,34px);
+    background:linear-gradient(180deg,transparent,rgba(14,101,96,.05));
+  }
+  .spine-title{
+    font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--ink-soft);margin-bottom:14px;
+  }
+  .layer{
+    position:relative;padding:7px 0 7px 18px;
+    font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--ink-soft);opacity:.45;
+    transition:opacity .35s ease,color .35s ease;
+  }
+  .layer::before{
+    content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
+    width:7px;height:7px;border:1px solid currentColor;border-radius:50%;
+    transition:background .35s ease,transform .35s ease;
+  }
+  .layer.done{opacity:.7}
+  .layer.done::before{background:currentColor}
+  .layer.on{opacity:1;color:var(--teal);font-weight:600}
+  .layer.on::before{background:var(--teal);transform:translateY(-50%) scale(1.6)}
+  .spine-foot{
+    margin-top:auto;padding-top:20px;font-family:"IBM Plex Mono",monospace;
+    font-size:10px;color:var(--ink-soft);letter-spacing:.06em;
+  }
+
+  .stage{position:relative;flex:1;min-width:0;overflow:hidden}
+  .slide{
+    position:absolute;inset:0;padding:var(--pad);
+    display:none;flex-direction:column;justify-content:center;
+    overflow-y:auto;
+  }
+  .slide.active{display:flex;animation:enter .45s cubic-bezier(.2,.7,.3,1)}
+  @keyframes enter{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){
+    .slide.active{animation:none}
+    .layer,.layer::before{transition:none}
+  }
+
+  /* ---------- tipografía ---------- */
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--teal);margin-bottom:16px;
+  }
+  h1{
+    font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;
+    font-weight:800;font-size:clamp(34px,6.4vw,80px);line-height:.98;
+    letter-spacing:-.02em;margin:0 0 20px;
+  }
+  h2{
+    font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;
+    font-weight:700;font-size:clamp(26px,3.9vw,48px);line-height:1.04;
+    letter-spacing:-.015em;margin:0 0 22px;max-width:22ch;
+  }
+  h3{
+    font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;
+    font-weight:700;font-size:clamp(16px,1.5vw,20px);margin:0 0 10px;
+  }
+  p{margin:0 0 14px;font-size:clamp(14px,1.35vw,19px);line-height:1.55;max-width:60ch}
+  .lead{font-size:clamp(16px,1.7vw,23px);color:var(--ink)}
+  .muted{color:var(--ink-soft)}
+  strong{font-weight:600}
+  em.hl{font-style:normal;background:linear-gradient(transparent 62%,rgba(201,138,14,.35) 62%)}
+  .plum{color:var(--plum)}
+  .teal{color:var(--teal)}
+
+  ul.bullets{list-style:none;margin:0;padding:0;max-width:64ch}
+  ul.bullets li{
+    position:relative;padding-left:26px;margin-bottom:14px;
+    font-size:clamp(14px,1.35vw,19px);line-height:1.5;
+  }
+  ul.bullets li::before{
+    content:"";position:absolute;left:0;top:.62em;width:12px;height:1px;background:var(--teal)
+  }
+
+  /* ---------- piezas ---------- */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:clamp(16px,2.4vw,40px);align-items:start}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(12px,1.8vw,26px);align-items:start}
+  .card{
+    border:1px solid var(--rule);background:rgba(255,255,255,.42);
+    padding:clamp(14px,1.7vw,24px);border-radius:2px;
+  }
+  .card.accent{border-left:3px solid var(--teal)}
+  .card.warn{border-left:3px solid var(--plum);background:rgba(122,42,85,.06)}
+  .card.amber{border-left:3px solid var(--amber);background:rgba(201,138,14,.08)}
+
+  table{border-collapse:collapse;width:100%;font-size:clamp(12px,1.15vw,16px)}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{
+    font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-soft);font-weight:500;
+  }
+  td.num{font-family:"IBM Plex Mono",monospace;color:var(--plum);font-weight:500;white-space:nowrap}
+  td.mono{font-family:"IBM Plex Mono",monospace;font-size:.94em}
+  tr.key td{background:rgba(14,101,96,.09)}
+
+  pre{
+    font-family:"IBM Plex Mono",monospace;font-size:clamp(11px,1.05vw,15px);
+    line-height:1.62;background:var(--ink);color:#D6E0DD;
+    padding:clamp(12px,1.5vw,22px);border-radius:3px;overflow-x:auto;margin:0 0 14px;
+  }
+  pre.sm{font-size:clamp(10px,.95vw,13.5px);line-height:1.55}
+  pre .c{color:#6E8B86}
+  pre .s{color:#E3B7A0}
+  pre .k{color:#7FCFC7}
+  pre .n{color:#E0C378}
+  code.inline{
+    font-family:"IBM Plex Mono",monospace;font-size:.9em;
+    background:rgba(16,32,31,.08);padding:1px 5px;border-radius:2px;
+  }
+
+  .stack{display:flex;flex-direction:column-reverse;gap:6px;max-width:640px}
+  .stack .s{
+    border:1px solid var(--rule);padding:10px 16px;background:rgba(255,255,255,.5);
+    font-family:"IBM Plex Mono",monospace;font-size:clamp(11px,1.05vw,14px);
+    display:flex;justify-content:space-between;gap:16px;
+  }
+  .stack .s b{font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+  .stack .s span{color:var(--ink-soft)}
+  .stack .s.hi{background:var(--teal);color:#EAF2F0;border-color:var(--teal)}
+  .stack .s.hi span{color:rgba(255,255,255,.72)}
+
+  .osi{display:flex;flex-direction:column;gap:4px;max-width:900px;width:100%}
+  .osi .lay{
+    display:grid;grid-template-columns:34px 200px 1fr;align-items:center;gap:14px;
+    border:1px solid var(--rule);border-left:3px solid var(--teal);
+    background:rgba(255,255,255,.5);padding:8px 14px;
+  }
+  .osi .lay .num{
+    font-family:"IBM Plex Mono",monospace;font-weight:600;
+    font-size:clamp(12px,1.2vw,16px);color:var(--teal);
+  }
+  .osi .lay .nm{
+    font-family:"Bricolage Grotesque",sans-serif;font-weight:700;
+    font-size:clamp(12px,1.25vw,17px);letter-spacing:-.01em;
+  }
+  .osi .lay .de{font-size:clamp(11px,1.05vw,15px);color:var(--ink-soft);line-height:1.35}
+  .osi .lay.host{border-left-color:var(--plum)}
+  .osi .lay.host .num{color:var(--plum)}
+  .osi .lay.mark{background:rgba(14,101,96,.12)}
+  @media (max-width:860px){
+    .osi .lay{grid-template-columns:26px 1fr;gap:8px}
+    .osi .lay .de{grid-column:2}
+  }
+
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:6px 0 18px}
+  .flow .n{
+    font-family:"IBM Plex Mono",monospace;font-size:clamp(11px,1.1vw,15px);
+    border:1px solid var(--teal);color:var(--teal);padding:7px 14px;border-radius:2px;
+  }
+  .flow .n.plum{border-color:var(--plum);color:var(--plum)}
+  .flow .n.fill{background:var(--teal);color:#EAF2F0}
+  .flow .a{color:var(--ink-soft)}
+
+  .big{
+    font-family:"Bricolage Grotesque",sans-serif;font-weight:800;
+    font-size:clamp(40px,7vw,96px);line-height:1;letter-spacing:-.03em;color:var(--teal);
+  }
+  .acid{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(10px,1.4vw,20px)}
+  .acid .l{
+    font-family:"Bricolage Grotesque",sans-serif;font-weight:800;
+    font-size:clamp(30px,4.4vw,62px);line-height:1;color:var(--plum);
+  }
+
+  /* ---------- topología ---------- */
+  .topo{
+    display:grid;grid-template-columns:auto 1fr;gap:clamp(10px,1.5vw,22px);
+    align-items:center;max-width:920px;margin:4px 0 16px;
+  }
+  .node{
+    border:1px solid var(--rule);background:rgba(255,255,255,.55);
+    padding:10px 16px;border-radius:2px;text-align:center;
+  }
+  .node b{
+    display:block;font-family:"Bricolage Grotesque",sans-serif;font-weight:700;
+    font-size:clamp(12px,1.2vw,17px);
+  }
+  .node span{
+    display:block;font-family:"IBM Plex Mono",monospace;
+    font-size:clamp(9.5px,.92vw,12px);color:var(--ink-soft);margin-top:3px;
+  }
+  .node.edge{border-left:3px solid var(--teal)}
+  .node.app{border-left:3px solid var(--plum)}
+  .fanout{display:flex;flex-direction:column;gap:8px}
+
+  /* ---------- hud ---------- */
+  .hud{
+    position:fixed;right:clamp(12px,2vw,26px);bottom:clamp(10px,1.6vw,20px);
+    display:flex;align-items:center;gap:12px;z-index:5;
+  }
+  .hud button{
+    font-family:"IBM Plex Mono",monospace;font-size:13px;
+    background:none;border:1px solid var(--rule);color:var(--ink);
+    width:32px;height:32px;border-radius:2px;cursor:pointer;line-height:1;
+  }
+  .hud button:hover{background:rgba(14,101,96,.12);border-color:var(--teal)}
+  .hud button:focus-visible,.layer:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .count{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+  .bar{position:fixed;left:0;bottom:0;height:2px;background:var(--teal);z-index:6;transition:width .3s ease;width:0}
+
+  /* ---------- portada ---------- */
+  .cover h1{max-width:16ch}
+  .cover .rule{width:90px;height:3px;background:var(--plum);margin:0 0 26px}
+  .cover .meta{
+    font-family:"IBM Plex Mono",monospace;font-size:clamp(11px,1.1vw,14px);
+    color:var(--ink-soft);letter-spacing:.06em;line-height:1.9;margin-top:24px;
+  }
+
+  /* ---------- responsive ---------- */
+  @media (max-width:860px){
+    :root{--spine-w:100%}
+    .deck{flex-direction:column}
+    .spine{
+      flex:0 0 auto;width:100%;border-right:none;border-bottom:1px solid var(--rule);
+      flex-direction:row;align-items:center;gap:4px;overflow-x:auto;
+      padding:10px 14px;justify-content:flex-start;
+    }
+    .spine-title,.spine-foot{display:none}
+    .layer{padding:4px 10px 4px 16px;font-size:9.5px;white-space:nowrap}
+    .grid2,.grid3,.acid,.topo{grid-template-columns:1fr}
+    .acid{grid-template-columns:1fr 1fr}
+    .slide{justify-content:flex-start;padding-top:26px;padding-bottom:64px}
+  }
+</style>
+</head>
+<body>
+<div class="deck">
+  <aside class="spine" id="spine">
+    <div class="spine-title">Peldano 1</div>
+    <div class="layer" data-l="estatico">Estático</div>
+    <div class="layer" data-l="proxy">Proxy inverso</div>
+    <div class="layer" data-l="gunicorn">Gunicorn</div>
+    <div class="layer" data-l="tls">TLS</div>
+    <div class="layer" data-l="balanceo">Balanceo</div>
+    <div class="layer" data-l="cache">Caché</div>
+    <div class="spine-foot">← → para navegar</div>
+  </aside>
+
+  <main class="stage" id="stage">
+
+    <!-- 1 · portada -->
+    <section class="slide cover" data-layer="">
+      <div class="eyebrow">Clase 5 · Unidad 2 · 150 minutos</div>
+      <div class="rule"></div>
+      <h1>El portero<br>del sitio</h1>
+      <p class="lead" style="max-width:47ch">Nginx, de lo simple a lo complejo. Empezamos sirviendo un archivo; terminamos con varias réplicas, TLS y caché delante de la misma <strong>biblioteca</strong>.</p>
+      <div class="meta">
+        ISW-233 · APLICACIONES WEB I · GESTIÓN II/2026<br>
+        Jose Jesus Cabrera Pantoja · UCB Santa Cruz
+      </div>
+    </section>
+
+    <!-- 2 · dónde quedamos -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Dónde quedamos</div>
+      <h2>La aplicación funciona. Nadie de afuera la usa.</h2>
+      <div class="grid2">
+        <div class="card">
+          <h3>Lo que tenemos</h3>
+          <ul class="bullets" style="margin-top:6px">
+            <li>Flask con CRUD completo sobre PostgreSQL</li>
+            <li><code class="inline">docker compose up</code> levanta todo</li>
+            <li>El servidor de desarrollo escuchando en <code class="inline">:8000</code></li>
+          </ul>
+        </div>
+        <div class="card warn">
+          <h3>Lo que falta</h3>
+          <ul class="bullets" style="margin-top:6px">
+            <li>Un solo proceso atiende <strong>una petición a la vez</strong></li>
+            <li>Los archivos estáticos pasan por Python</li>
+            <li>Sin HTTPS, sin límites, sin réplicas</li>
+          </ul>
+        </div>
+      </div>
+      <p class="muted" style="margin-top:18px">Hoy no tocamos <code class="inline">main.py</code> casi nada. Todo lo que agregamos vive <strong>delante</strong> de la aplicación.</p>
+    </section>
+
+    <!-- 3 · plan -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Plan de la clase</div>
+      <h2>Una escalera de seis peldaños</h2>
+      <table>
+        <tr><th>Bloque</th><th>Tema</th><th>Min</th></tr>
+        <tr><td class="num">1</td><td>Nginx sirviendo archivos: el caso más simple</td><td class="num">20</td></tr>
+        <tr><td class="num">2</td><td>Proxy inverso: nginx delante de Flask</td><td class="num">30</td></tr>
+        <tr><td class="num">3</td><td>Gunicorn: quién ejecuta Python de verdad</td><td class="num">25</td></tr>
+        <tr><td class="num">4</td><td>HTTPS y cabeceras: el borde público</td><td class="num">25</td></tr>
+        <tr><td class="num">5</td><td>Balanceo de carga: varias réplicas</td><td class="num">30</td></tr>
+        <tr class="key"><td class="num">6</td><td><strong>Caché y límites: el peldaño más alto</strong></td><td class="num">20</td></tr>
+      </table>
+      <p class="muted" style="margin-top:16px">Cada peldaño agrega <em class="hl">una sola capacidad</em> y deja el anterior funcionando. Ese es el método.</p>
+    </section>
+
+    <!-- 4 · la pregunta -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">La pregunta de hoy</div>
+      <h2>¿Por qué poner otro servidor delante del servidor?</h2>
+      <p class="lead">Suena redundante. Flask ya responde HTTP. ¿Para qué agregar una pieza más?</p>
+      <div class="grid2" style="margin-top:8px">
+        <div class="card">
+          <h3>Flask sabe</h3>
+          <p style="margin:0" class="muted">Tu lógica: qué libro mostrar, qué guardar, qué plantilla renderizar. Eso es lo único que <strong>nadie más puede hacer por vos</strong>.</p>
+        </div>
+        <div class="card accent">
+          <h3>Nginx sabe</h3>
+          <p style="margin:0" class="muted">Miles de conexiones lentas, archivos, TLS, compresión, reintentos, caché. Problemas <strong>idénticos en todos los sitios del mundo</strong>.</p>
+        </div>
+      </div>
+      <p style="margin-top:18px">Poner nginx delante es <em class="hl">dejar de resolver en Python problemas que no son de tu dominio</em>.</p>
+    </section>
+
+    <!-- 5 · dónde encaja en la pila -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Ubicación</div>
+      <h2>Dónde entra nginx en lo que ya conocen</h2>
+      <div class="osi">
+        <div class="lay host mark"><span class="num">7</span><span class="nm">Aplicación</span><span class="de">HTTP — aquí viven nginx y Flask, los dos</span></div>
+        <div class="lay"><span class="num">6·5</span><span class="nm">Presentación / Sesión</span><span class="de">TLS: nginx lo termina, Flask nunca lo ve</span></div>
+        <div class="lay"><span class="num">4</span><span class="nm">Transporte</span><span class="de">TCP — el puerto 80, el 443, el 8000</span></div>
+        <div class="lay"><span class="num">3</span><span class="nm">Red</span><span class="de">IP — la dirección del contenedor</span></div>
+      </div>
+      <p style="margin-top:16px">Nginx <strong>no es una capa nueva</strong>: es otro programa en la misma capa 7. Habla el mismo HTTP que Flask, hacia los dos lados.</p>
+    </section>
+
+    <!-- 6 · peldaño 1 -->
+    <section class="slide" data-layer="estatico">
+      <div class="eyebrow">Bloque 1 · Peldaño 1</div>
+      <h2>Lo más simple que hace nginx: entregar un archivo</h2>
+      <div class="flow">
+        <span class="n">Navegador</span><span class="a">→</span>
+        <span class="n fill">Nginx</span><span class="a">→</span>
+        <span class="n">disco</span>
+      </div>
+      <p class="lead">Sin Python, sin base de datos, sin lógica. Una petición llega, nginx busca el archivo en una carpeta y lo devuelve.</p>
+      <div class="card accent">
+        <p style="margin:0">Este caso ya es útil por sí solo: un sitio de HTML, CSS e imágenes no necesita nada más. Y es la <strong>base</strong> de todo lo que sigue.</p>
+      </div>
+    </section>
+
+    <!-- 7 · primera config -->
+    <section class="slide" data-layer="estatico">
+      <div class="eyebrow">Bloque 1 · Configuración</div>
+      <h2>La configuración mínima, línea por línea</h2>
+<pre><span class="k">server</span> {
+    listen 80;                       <span class="c"># qué puerto atiendo</span>
+    server_name biblioteca.local;    <span class="c"># para qué nombre respondo</span>
+
+    root /var/www/biblioteca;        <span class="c"># dónde busco los archivos</span>
+    index index.html;                <span class="c"># qué devuelvo si piden "/"</span>
+
+    <span class="k">location</span> / {
+        try_files $uri $uri/ =404;   <span class="c"># ¿existe? sirvo. ¿no? 404</span>
+    }
+}</pre>
+      <p class="muted">Siete líneas. <code class="inline">server</code> es un sitio; <code class="inline">location</code> es una regla para un conjunto de URLs. Todo el resto de la clase agrega bloques dentro de esta misma forma.</p>
+    </section>
+
+    <!-- 8 · cómo se traduce una URL -->
+    <section class="slide" data-layer="estatico">
+      <div class="eyebrow">Bloque 1 · El modelo mental</div>
+      <h2>Una URL es una ruta de disco, hasta que deja de serlo</h2>
+<pre>GET /css/estilos.css
+                 <span class="c">│</span>
+      root <span class="s">/var/www/biblioteca</span>  +  uri <span class="s">/css/estilos.css</span>
+                 <span class="c">↓</span>
+      <span class="n">/var/www/biblioteca/css/estilos.css</span></pre>
+      <p>Nginx <strong>concatena</strong> <code class="inline">root</code> con la URI. Si el archivo existe, lo entrega; si no, <code class="inline">try_files</code> decide el siguiente intento.</p>
+      <div class="card warn">
+        <p style="margin:0">El error clásico: usar <code class="inline">alias</code> y <code class="inline">root</code> como si fueran sinónimos. <code class="inline">root</code> <strong>agrega</strong> la URI al camino; <code class="inline">alias</code> la <strong>reemplaza</strong>.</p>
+      </div>
+    </section>
+
+    <!-- 9 · por qué nginx es rápido -->
+    <section class="slide" data-layer="estatico">
+      <div class="eyebrow">Bloque 1 · Por qué importa</div>
+      <h2>Un proceso, diez mil conexiones</h2>
+      <div class="grid2">
+        <div class="card warn">
+          <h3>Flask en desarrollo</h3>
+          <p style="margin:0" class="muted">Un hilo atiende <strong>una petición completa</strong>. Mientras espera, no hace nada más. Cien clientes lentos = cien bloqueos.</p>
+        </div>
+        <div class="card accent">
+          <h3>Nginx</h3>
+          <p style="margin:0" class="muted">Un proceso maneja miles de conexiones con un <strong>bucle de eventos</strong>. Cuando una espera, atiende otra. Nadie bloquea a nadie.</p>
+        </div>
+      </div>
+      <p style="margin-top:18px">Por eso el trabajo se reparte así: nginx aguanta <em class="hl">la multitud</em>, Flask atiende <em class="hl">el pedido</em>.</p>
+    </section>
+
+  </main>
+</div>
+
+<div class="bar" id="bar"></div>
+<div class="hud">
+  <button id="prev" aria-label="Anterior">←</button>
+  <button id="next" aria-label="Siguiente">→</button>
+  <span class="count" id="count">1 / 1</span>
+</div>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var layers = Array.prototype.slice.call(document.querySelectorAll('.layer'));
+  var order  = ['estatico','proxy','gunicorn','tls','balanceo','cache'];
+  var i = 0;
+
+  function paintSpine(key){
+    var idx = order.indexOf(key);
+    layers.forEach(function(el){
+      var k = el.getAttribute('data-l');
+      var p = order.indexOf(k);
+      el.classList.remove('on','done');
+      if(idx === -1) return;
+      if(p < idx) el.classList.add('done');
+      if(p === idx) el.classList.add('on');
+    });
+  }
+
+  function show(n){
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function(s, k){ s.classList.toggle('active', k === i); });
+    slides[i].scrollTop = 0;
+    paintSpine(slides[i].getAttribute('data-layer') || '');
+    document.getElementById('count').textContent = (i + 1) + ' / ' + slides.length;
+    document.getElementById('bar').style.width = ((i) / (slides.length - 1) * 100) + '%';
+    try { location.hash = i + 1; } catch(e){}
+  }
+
+  document.getElementById('next').addEventListener('click', function(){ show(i + 1); });
+  document.getElementById('prev').addEventListener('click', function(){ show(i - 1); });
+
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' '){ e.preventDefault(); show(i + 1); }
+    else if(e.key === 'ArrowLeft' || e.key === 'PageUp'){ e.preventDefault(); show(i - 1); }
+    else if(e.key === 'Home'){ show(0); }
+    else if(e.key === 'End'){ show(slides.length - 1); }
+    else if(e.key === 'f' || e.key === 'F'){
+      if(!document.fullscreenElement){ document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); }
+      else { document.exitFullscreen(); }
+    }
+  });
+
+  var x0 = null;
+  document.addEventListener('touchstart', function(e){ x0 = e.changedTouches[0].clientX; }, {passive:true});
+  document.addEventListener('touchend', function(e){
+    if(x0 === null) return;
+    var dx = e.changedTouches[0].clientX - x0;
+    if(Math.abs(dx) > 60){ show(dx < 0 ? i + 1 : i - 1); }
+    x0 = null;
+  }, {passive:true});
+
+  var start = parseInt((location.hash || '').replace('#',''), 10);
+  show(isNaN(start) ? 0 : start - 1);
+})();
+</script>
+</body>
+</html>
