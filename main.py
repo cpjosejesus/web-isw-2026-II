@@ -7,6 +7,7 @@ que el ORM genera detras.
 import os
 
 from flask import Flask, flash, redirect, render_template, request, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from models import db, Autor, Libro
 
@@ -17,6 +18,11 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.secret_key = os.environ.get('SECRET_KEY', 'clave-de-desarrollo')
+
+# Detras de nginx, la peticion que llega a Flask viene del proxy. ProxyFix
+# le dice que confie en las cabeceras X-Forwarded-* de UN solo salto, el
+# nuestro. Sin esto url_for genera http:// cuando el cliente pidio https://.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 db.init_app(app)
 

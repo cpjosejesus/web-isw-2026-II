@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Paso 1 - Nginx sirviendo archivos</title>
+<title>Paso 2 - Proxy inverso</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -267,7 +267,7 @@
 <body>
 <div class="deck">
   <aside class="spine" id="spine">
-    <div class="spine-title">Peldano 1</div>
+    <div class="spine-title">Peldano 2</div>
     <div class="layer" data-l="estatico">Estático</div>
     <div class="layer" data-l="proxy">Proxy inverso</div>
     <div class="layer" data-l="gunicorn">Gunicorn</div>
@@ -279,153 +279,127 @@
 
   <main class="stage" id="stage">
 
-    <!-- 1 · portada -->
-    <section class="slide cover" data-layer="">
-      <div class="eyebrow">Clase 5 · Unidad 2 · 150 minutos</div>
-      <div class="rule"></div>
-      <h1>El portero<br>del sitio</h1>
-      <p class="lead" style="max-width:47ch">Nginx, de lo simple a lo complejo. Empezamos sirviendo un archivo; terminamos con varias réplicas, TLS y caché delante de la misma <strong>biblioteca</strong>.</p>
-      <div class="meta">
-        ISW-233 · APLICACIONES WEB I · GESTIÓN II/2026<br>
-        Jose Jesus Cabrera Pantoja · UCB Santa Cruz
-      </div>
-    </section>
-
-    <!-- 2 · dónde quedamos -->
-    <section class="slide" data-layer="">
-      <div class="eyebrow">Dónde quedamos</div>
-      <h2>La aplicación funciona. Nadie de afuera la usa.</h2>
-      <div class="grid2">
-        <div class="card">
-          <h3>Lo que tenemos</h3>
-          <ul class="bullets" style="margin-top:6px">
-            <li>Flask con CRUD completo sobre PostgreSQL</li>
-            <li><code class="inline">docker compose up</code> levanta todo</li>
-            <li>El servidor de desarrollo escuchando en <code class="inline">:8000</code></li>
-          </ul>
-        </div>
-        <div class="card warn">
-          <h3>Lo que falta</h3>
-          <ul class="bullets" style="margin-top:6px">
-            <li>Un solo proceso atiende <strong>una petición a la vez</strong></li>
-            <li>Los archivos estáticos pasan por Python</li>
-            <li>Sin HTTPS, sin límites, sin réplicas</li>
-          </ul>
-        </div>
-      </div>
-      <p class="muted" style="margin-top:18px">Hoy no tocamos <code class="inline">main.py</code> casi nada. Todo lo que agregamos vive <strong>delante</strong> de la aplicación.</p>
-    </section>
-
-    <!-- 3 · plan -->
-    <section class="slide" data-layer="">
-      <div class="eyebrow">Plan de la clase</div>
-      <h2>Una escalera de seis peldaños</h2>
-      <table>
-        <tr><th>Bloque</th><th>Tema</th><th>Min</th></tr>
-        <tr><td class="num">1</td><td>Nginx sirviendo archivos: el caso más simple</td><td class="num">20</td></tr>
-        <tr><td class="num">2</td><td>Proxy inverso: nginx delante de Flask</td><td class="num">30</td></tr>
-        <tr><td class="num">3</td><td>Gunicorn: quién ejecuta Python de verdad</td><td class="num">25</td></tr>
-        <tr><td class="num">4</td><td>HTTPS y cabeceras: el borde público</td><td class="num">25</td></tr>
-        <tr><td class="num">5</td><td>Balanceo de carga: varias réplicas</td><td class="num">30</td></tr>
-        <tr class="key"><td class="num">6</td><td><strong>Caché y límites: el peldaño más alto</strong></td><td class="num">20</td></tr>
-      </table>
-      <p class="muted" style="margin-top:16px">Cada peldaño agrega <em class="hl">una sola capacidad</em> y deja el anterior funcionando. Ese es el método.</p>
-    </section>
-
-    <!-- 4 · la pregunta -->
-    <section class="slide" data-layer="">
-      <div class="eyebrow">La pregunta de hoy</div>
-      <h2>¿Por qué poner otro servidor delante del servidor?</h2>
-      <p class="lead">Suena redundante. Flask ya responde HTTP. ¿Para qué agregar una pieza más?</p>
-      <div class="grid2" style="margin-top:8px">
-        <div class="card">
-          <h3>Flask sabe</h3>
-          <p style="margin:0" class="muted">Tu lógica: qué libro mostrar, qué guardar, qué plantilla renderizar. Eso es lo único que <strong>nadie más puede hacer por vos</strong>.</p>
-        </div>
-        <div class="card accent">
-          <h3>Nginx sabe</h3>
-          <p style="margin:0" class="muted">Miles de conexiones lentas, archivos, TLS, compresión, reintentos, caché. Problemas <strong>idénticos en todos los sitios del mundo</strong>.</p>
-        </div>
-      </div>
-      <p style="margin-top:18px">Poner nginx delante es <em class="hl">dejar de resolver en Python problemas que no son de tu dominio</em>.</p>
-    </section>
-
-    <!-- 5 · dónde encaja en la pila -->
-    <section class="slide" data-layer="">
-      <div class="eyebrow">Ubicación</div>
-      <h2>Dónde entra nginx en lo que ya conocen</h2>
-      <div class="osi">
-        <div class="lay host mark"><span class="num">7</span><span class="nm">Aplicación</span><span class="de">HTTP — aquí viven nginx y Flask, los dos</span></div>
-        <div class="lay"><span class="num">6·5</span><span class="nm">Presentación / Sesión</span><span class="de">TLS: nginx lo termina, Flask nunca lo ve</span></div>
-        <div class="lay"><span class="num">4</span><span class="nm">Transporte</span><span class="de">TCP — el puerto 80, el 443, el 8000</span></div>
-        <div class="lay"><span class="num">3</span><span class="nm">Red</span><span class="de">IP — la dirección del contenedor</span></div>
-      </div>
-      <p style="margin-top:16px">Nginx <strong>no es una capa nueva</strong>: es otro programa en la misma capa 7. Habla el mismo HTTP que Flask, hacia los dos lados.</p>
-    </section>
-
-    <!-- 6 · peldaño 1 -->
-    <section class="slide" data-layer="estatico">
-      <div class="eyebrow">Bloque 1 · Peldaño 1</div>
-      <h2>Lo más simple que hace nginx: entregar un archivo</h2>
+    <!-- 10 · peldaño 2 -->
+    <section class="slide" data-layer="proxy">
+      <div class="eyebrow">Bloque 2 · Peldaño 2</div>
+      <h2>Un sitio no es solo archivos: entra Flask</h2>
       <div class="flow">
         <span class="n">Navegador</span><span class="a">→</span>
         <span class="n fill">Nginx</span><span class="a">→</span>
-        <span class="n">disco</span>
+        <span class="n plum">Flask :8000</span><span class="a">→</span>
+        <span class="n plum">PostgreSQL</span>
       </div>
-      <p class="lead">Sin Python, sin base de datos, sin lógica. Una petición llega, nginx busca el archivo en una carpeta y lo devuelve.</p>
-      <div class="card accent">
-        <p style="margin:0">Este caso ya es útil por sí solo: un sitio de HTML, CSS e imágenes no necesita nada más. Y es la <strong>base</strong> de todo lo que sigue.</p>
-      </div>
+      <p class="lead">El catálogo de libros no está en disco: se arma en cada petición. Nginx no puede generarlo, pero sabe <strong>a quién preguntarle</strong>.</p>
+      <p>Eso es un <strong>proxy inverso</strong>: nginx recibe la petición del cliente, la reenvía a otro servidor, y devuelve la respuesta como si fuera propia.</p>
     </section>
 
-    <!-- 7 · primera config -->
-    <section class="slide" data-layer="estatico">
-      <div class="eyebrow">Bloque 1 · Configuración</div>
-      <h2>La configuración mínima, línea por línea</h2>
-<pre><span class="k">server</span> {
-    listen 80;                       <span class="c"># qué puerto atiendo</span>
-    server_name biblioteca.local;    <span class="c"># para qué nombre respondo</span>
+    <!-- 11 · directo vs inverso -->
+    <section class="slide" data-layer="proxy">
+      <div class="eyebrow">Bloque 2 · Distinción</div>
+      <h2>Proxy directo e inverso: de qué lado está</h2>
+      <table>
+        <tr><th></th><th>Proxy directo</th><th>Proxy inverso</th></tr>
+        <tr><td class="num">Sirve a</td><td>El <strong>cliente</strong></td><td>El <strong>servidor</strong></td></tr>
+        <tr><td class="num">Lo configura</td><td>Quien navega</td><td>Quien publica el sitio</td></tr>
+        <tr><td class="num">Oculta</td><td>Quién es el cliente</td><td>Cómo es el backend</td></tr>
+        <tr><td class="num">Ejemplo</td><td>El proxy de una empresa</td><td class="mono">nginx delante de Flask</td></tr>
+        <tr class="key"><td class="num">El cliente</td><td>Sabe que hay un proxy</td><td><strong>No se entera de nada</strong></td></tr>
+      </table>
+      <p class="muted" style="margin-top:16px">Para el navegador, nginx <em class="hl">es</em> el sitio. Que por detrás haya uno o veinte procesos de Flask es asunto nuestro.</p>
+    </section>
 
-    root /var/www/biblioteca;        <span class="c"># dónde busco los archivos</span>
-    index index.html;                <span class="c"># qué devuelvo si piden "/"</span>
+    <!-- 12 · config proxy -->
+    <section class="slide" data-layer="proxy">
+      <div class="eyebrow">Bloque 2 · Configuración</div>
+      <h2>Reenviar a Flask</h2>
+<pre><span class="k">server</span> {
+    listen 80;
+    server_name biblioteca.local;
+
+    <span class="k">location</span> /static/ {
+        alias /var/www/biblioteca/static/;   <span class="c"># esto lo sirve nginx</span>
+        expires 30d;                         <span class="c"># y el navegador lo guarda</span>
+    }
 
     <span class="k">location</span> / {
-        try_files $uri $uri/ =404;   <span class="c"># ¿existe? sirvo. ¿no? 404</span>
+        proxy_pass http://<span class="s">web</span>:8000;             <span class="c"># todo lo demás, a Flask</span>
     }
 }</pre>
-      <p class="muted">Siete líneas. <code class="inline">server</code> es un sitio; <code class="inline">location</code> es una regla para un conjunto de URLs. Todo el resto de la clase agrega bloques dentro de esta misma forma.</p>
+      <p class="muted">Dos <code class="inline">location</code>. Nginx elige el <strong>más específico</strong> que coincida: <code class="inline">/static/estilos.css</code> va al disco, <code class="inline">/libros/3</code> va a Flask.</p>
     </section>
 
-    <!-- 8 · cómo se traduce una URL -->
-    <section class="slide" data-layer="estatico">
-      <div class="eyebrow">Bloque 1 · El modelo mental</div>
-      <h2>Una URL es una ruta de disco, hasta que deja de serlo</h2>
-<pre>GET /css/estilos.css
-                 <span class="c">│</span>
-      root <span class="s">/var/www/biblioteca</span>  +  uri <span class="s">/css/estilos.css</span>
-                 <span class="c">↓</span>
-      <span class="n">/var/www/biblioteca/css/estilos.css</span></pre>
-      <p>Nginx <strong>concatena</strong> <code class="inline">root</code> con la URI. Si el archivo existe, lo entrega; si no, <code class="inline">try_files</code> decide el siguiente intento.</p>
-      <div class="card warn">
-        <p style="margin:0">El error clásico: usar <code class="inline">alias</code> y <code class="inline">root</code> como si fueran sinónimos. <code class="inline">root</code> <strong>agrega</strong> la URI al camino; <code class="inline">alias</code> la <strong>reemplaza</strong>.</p>
+    <!-- 13 · el descuido de las cabeceras -->
+    <section class="slide" data-layer="proxy">
+      <div class="eyebrow">Bloque 2 · La trampa</div>
+      <h2>Flask deja de saber quién le habla</h2>
+      <p>Con ese <code class="inline">proxy_pass</code>, todas las peticiones que ve Flask vienen de la IP de nginx, con el nombre de host equivocado. <code class="inline">url_for</code> empieza a generar enlaces rotos.</p>
+<pre><span class="k">location</span> / {
+    proxy_pass http://web:8000;
+
+    proxy_set_header Host              $host;              <span class="c"># el nombre real</span>
+    proxy_set_header X-Real-IP         $remote_addr;       <span class="c"># el cliente real</span>
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;            <span class="c"># http o https</span>
+}</pre>
+      <div class="card accent">
+        <p style="margin:0">Estas cuatro líneas van <strong>siempre</strong>. Son la forma de decirle a la aplicación: «lo que ves viene de mí, pero el cliente original era este».</p>
       </div>
     </section>
 
-    <!-- 9 · por qué nginx es rápido -->
-    <section class="slide" data-layer="estatico">
-      <div class="eyebrow">Bloque 1 · Por qué importa</div>
-      <h2>Un proceso, diez mil conexiones</h2>
-      <div class="grid2">
-        <div class="card warn">
-          <h3>Flask en desarrollo</h3>
-          <p style="margin:0" class="muted">Un hilo atiende <strong>una petición completa</strong>. Mientras espera, no hace nada más. Cien clientes lentos = cien bloqueos.</p>
+    <!-- 14 · lado Flask -->
+    <section class="slide" data-layer="proxy">
+      <div class="eyebrow">Bloque 2 · Del otro lado</div>
+      <h2>Y Flask tiene que creerle</h2>
+<pre><span class="c"># main.py</span>
+<span class="k">from</span> werkzeug.middleware.proxy_fix <span class="k">import</span> ProxyFix
+
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=<span class="n">1</span>, x_proto=<span class="n">1</span>, x_host=<span class="n">1</span>)</pre>
+      <p>Sin esto, Flask ignora las cabeceras <code class="inline">X-Forwarded-*</code> — y hace bien: cualquiera puede inventarlas. <code class="inline">ProxyFix</code> le dice <em class="hl">confía, pero solo en un salto</em>.</p>
+      <div class="card warn">
+        <p style="margin:0">Nunca pongan <code class="inline">ProxyFix</code> en una app expuesta directo a internet. Solo tiene sentido cuando hay un proxy de ustedes por delante.</p>
+      </div>
+    </section>
+
+    <!-- 15 · demo compose -->
+    <section class="slide" data-layer="proxy">
+      <div class="eyebrow">Bloque 2 · En la biblioteca</div>
+      <h2>Un servicio más en el compose</h2>
+<pre>services:
+  <span class="k">nginx</span>:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"                                  <span class="c"># el único publicado ahora</span>
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./static:/var/www/biblioteca/static:ro
+    depends_on: [web]
+
+  <span class="k">web</span>:
+    build: .
+    expose:
+      - "8000"                                   <span class="c"># visible en la red interna, NO afuera</span></pre>
+      <p class="muted"><code class="inline">ports</code> publica al host; <code class="inline">expose</code> solo abre dentro de la red de compose. Flask deja de ser alcanzable desde afuera: <em class="hl">esa es la mejora de seguridad</em>.</p>
+    </section>
+
+    <!-- 16 · qué se gana -->
+    <section class="slide" data-layer="proxy">
+      <div class="eyebrow">Bloque 2 · Balance</div>
+      <h2>Qué ganamos en este peldaño</h2>
+      <div class="grid3">
+        <div class="card accent">
+          <h3>Estáticos</h3>
+          <p style="margin:0" class="muted">El CSS ya no pasa por Python. Nginx lo lee del disco y lo cachea el navegador.</p>
         </div>
         <div class="card accent">
-          <h3>Nginx</h3>
-          <p style="margin:0" class="muted">Un proceso maneja miles de conexiones con un <strong>bucle de eventos</strong>. Cuando una espera, atiende otra. Nadie bloquea a nadie.</p>
+          <h3>Un solo puerto</h3>
+          <p style="margin:0" class="muted">El 80 hacia afuera. La aplicación queda escondida en la red interna.</p>
+        </div>
+        <div class="card accent">
+          <h3>Punto de control</h3>
+          <p style="margin:0" class="muted">Un lugar donde después pondremos TLS, límites, caché y balanceo.</p>
         </div>
       </div>
-      <p style="margin-top:18px">Por eso el trabajo se reparte así: nginx aguanta <em class="hl">la multitud</em>, Flask atiende <em class="hl">el pedido</em>.</p>
+      <p style="margin-top:18px">Pero el problema de fondo sigue: detrás de nginx todavía hay <em class="hl">un servidor de desarrollo</em>.</p>
     </section>
 
   </main>
