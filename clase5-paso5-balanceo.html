@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Paso 4 - TLS y cabeceras</title>
+<title>Paso 5 - Balanceo de carga</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -267,7 +267,7 @@
 <body>
 <div class="deck">
   <aside class="spine" id="spine">
-    <div class="spine-title">Peldano 4</div>
+    <div class="spine-title">Peldano 5</div>
     <div class="layer" data-l="estatico">Estático</div>
     <div class="layer" data-l="proxy">Proxy inverso</div>
     <div class="layer" data-l="gunicorn">Gunicorn</div>
@@ -279,90 +279,95 @@
 
   <main class="stage" id="stage">
 
-    <!-- 23 · peldaño 4 -->
-    <section class="slide" data-layer="tls">
-      <div class="eyebrow">Bloque 4 · Peldaño 4</div>
-      <h2>Todo lo que enviamos viaja en texto plano</h2>
+    <!-- 28 · peldaño 5 -->
+    <section class="slide" data-layer="balanceo">
+      <div class="eyebrow">Bloque 5 · Peldaño 5</div>
+      <h2>Un contenedor sigue siendo un solo punto de falla</h2>
+      <p class="lead">Gunicorn nos dio cuatro workers, pero todos dentro del mismo contenedor. Si ese contenedor se cae o hay que actualizarlo, el sitio se cae.</p>
       <div class="flow">
-        <span class="n plum">POST /libros/crear</span><span class="a">→ cualquiera en la red lo lee →</span>
-        <span class="n plum">título, autor, cookie de sesión</span>
+        <span class="n fill">Nginx</span><span class="a">→</span>
+        <span class="n plum">web_1</span>
+        <span class="n plum">web_2</span>
+        <span class="n plum">web_3</span>
       </div>
-      <p class="lead">La cookie de sesión que firmamos en la clase 4 viaja en cada petición. Sin TLS, robarla es <strong>escuchar</strong>.</p>
-      <p>HTTPS es HTTP dentro de un túnel cifrado. Y ese túnel lo termina nginx, no Flask.</p>
+      <p>La respuesta es la misma idea de siempre, un nivel más arriba: <em class="hl">varias copias, alguien que reparte</em>.</p>
     </section>
 
-    <!-- 24 · terminación TLS -->
-    <section class="slide" data-layer="tls">
-      <div class="eyebrow">Bloque 4 · El modelo</div>
-      <h2>Terminación TLS: el cifrado se abre en el borde</h2>
-      <div class="flow">
-        <span class="n">Navegador</span><span class="a">— HTTPS cifrado →</span>
-        <span class="n fill">Nginx</span><span class="a">— HTTP en red interna →</span>
-        <span class="n plum">Gunicorn</span>
-      </div>
-      <p>Nginx guarda el certificado y la clave privada, descifra, y reenvía en claro por una red que <strong>solo existe dentro de compose</strong>.</p>
-      <div class="card accent">
-        <p style="margin:0">Ventaja concreta: el certificado se renueva y se configura <em class="hl">en un solo lugar</em>, aunque haya veinte réplicas de la aplicación detrás.</p>
-      </div>
-    </section>
-
-    <!-- 25 · config tls -->
-    <section class="slide" data-layer="tls">
-      <div class="eyebrow">Bloque 4 · Configuración</div>
-      <h2>Dos <code class="inline" style="font-size:.68em">server</code>: uno redirige, otro atiende</h2>
-<pre><span class="k">server</span> {
-    listen 80;
-    server_name biblioteca.ucb.edu.bo;
-    return <span class="n">301</span> https://$host$request_uri;   <span class="c"># nadie se queda en http</span>
+    <!-- 29 · upstream -->
+    <section class="slide" data-layer="balanceo">
+      <div class="eyebrow">Bloque 5 · Configuración</div>
+      <h2>Un grupo de servidores con nombre</h2>
+<pre><span class="k">upstream</span> <span class="n">biblioteca</span> {
+    server web_1:8000;
+    server web_2:8000;
+    server web_3:8000;
 }
 
 <span class="k">server</span> {
     listen 443 ssl;
-    server_name biblioteca.ucb.edu.bo;
-
-    ssl_certificate     /etc/nginx/certs/fullchain.pem;
-    ssl_certificate_key /etc/nginx/certs/privkey.pem;
-    ssl_protocols       TLSv1.2 TLSv1.3;
-
-    <span class="k">location</span> / { proxy_pass http://web:8000; <span class="c">/* + las 4 cabeceras */</span> }
+    <span class="k">location</span> / {
+        proxy_pass http://<span class="n">biblioteca</span>;      <span class="c"># ya no un host: un grupo</span>
+    }
 }</pre>
-      <p class="muted">El <code class="inline">301</code> es permanente: el navegador lo recuerda y la próxima vez ni intenta por HTTP.</p>
+      <p class="muted">Cambió <strong>una palabra</strong> en <code class="inline">proxy_pass</code>. Todo lo anterior — TLS, cabeceras, estáticos — sigue igual. Así se ve una arquitectura que crece bien.</p>
     </section>
 
-    <!-- 26 · certificados -->
-    <section class="slide" data-layer="tls">
-      <div class="eyebrow">Bloque 4 · De dónde sale el certificado</div>
-      <h2>Autofirmado para aprender, Let's Encrypt para publicar</h2>
-      <div class="grid2">
-        <div class="card">
-          <h3>En su máquina</h3>
-<pre class="sm" style="margin:8px 0 0">openssl req -x509 -newkey rsa:2048 \
-  -keyout privkey.pem -out fullchain.pem \
-  -days 365 -nodes \
-  -subj "/CN=localhost"</pre>
-          <p class="muted" style="margin:10px 0 0;font-size:.92em">El navegador va a advertir. Es correcto: nadie lo avala.</p>
-        </div>
-        <div class="card accent">
-          <h3>En un dominio real</h3>
-          <p style="margin:0" class="muted">Certbot pide el certificado a Let's Encrypt, que verifica que el dominio es suyo sirviendo un archivo bajo <code class="inline">/.well-known/</code>. Gratis y automático, cada 90 días.</p>
-        </div>
+    <!-- 30 · estrategias -->
+    <section class="slide" data-layer="balanceo">
+      <div class="eyebrow">Bloque 5 · Cómo reparte</div>
+      <h2>Tres formas de elegir a quién le toca</h2>
+      <table>
+        <tr><th>Estrategia</th><th>Directiva</th><th>Cuándo</th></tr>
+        <tr><td><strong>Round-robin</strong></td><td class="mono">(por defecto)</td><td>Uno a cada uno, por turno. Sirve casi siempre.</td></tr>
+        <tr><td><strong>Menos conexiones</strong></td><td class="mono">least_conn;</td><td>Cuando las peticiones duran muy distinto entre sí.</td></tr>
+        <tr><td><strong>Por IP</strong></td><td class="mono">ip_hash;</td><td>Cuando el mismo cliente <strong>debe</strong> caer siempre en el mismo servidor.</td></tr>
+      </table>
+      <div class="card warn" style="margin-top:16px">
+        <p style="margin:0">Si necesitan <code class="inline">ip_hash</code> para que la aplicación funcione, es señal de que hay <em class="hl">estado en la memoria del proceso</em>. La solución de fondo no es el balanceador: es mover ese estado a PostgreSQL.</p>
       </div>
-      <p class="muted" style="margin-top:16px">Un certificado no dice que el sitio sea bueno. Solo dice que <em class="hl">el dominio es de quien dice ser</em>.</p>
     </section>
 
-    <!-- 27 · cabeceras y límites -->
-    <section class="slide" data-layer="tls">
-      <div class="eyebrow">Bloque 4 · El borde</div>
-      <h2>Cosas que se resuelven una vez, para todo el sitio</h2>
-<pre>add_header Strict-Transport-Security <span class="s">"max-age=31536000"</span> always;
-add_header X-Content-Type-Options    <span class="s">"nosniff"</span> always;
-add_header X-Frame-Options           <span class="s">"SAMEORIGIN"</span> always;
+    <!-- 31 · pesos y salud -->
+    <section class="slide" data-layer="balanceo">
+      <div class="eyebrow">Bloque 5 · Tolerancia a fallos</div>
+      <h2>Qué pasa cuando una réplica se cae</h2>
+<pre><span class="k">upstream</span> biblioteca {
+    least_conn;
+    server web_1:8000 weight=<span class="n">2</span>;                    <span class="c"># máquina más grande</span>
+    server web_2:8000;
+    server web_3:8000 max_fails=<span class="n">3</span> fail_timeout=<span class="n">30s</span>;  <span class="c"># 3 fallos → 30 s afuera</span>
+    server web_4:8000 backup;                       <span class="c"># solo si caen las demás</span>
+}</pre>
+      <p>Nginx marca la réplica caída y <strong>deja de mandarle tráfico</strong>. Pasado el <code class="inline">fail_timeout</code>, prueba de nuevo con una petición.</p>
+      <p class="muted">El usuario no ve un error: ve la respuesta de otra réplica. Eso es <em class="hl">alta disponibilidad</em>, y son cuatro líneas de configuración.</p>
+    </section>
 
-client_max_body_size <span class="n">5m</span>;        <span class="c"># nadie sube un archivo de 2 GB</span>
+    <!-- 32 · escalar en compose -->
+    <section class="slide" data-layer="balanceo">
+      <div class="eyebrow">Bloque 5 · En la biblioteca</div>
+      <h2>Tres réplicas sin escribir tres servicios</h2>
+<pre>docker compose up -d --scale web=<span class="n">3</span></pre>
+<pre><span class="k">upstream</span> biblioteca {
+    server <span class="s">web</span>:8000;        <span class="c"># compose resuelve "web" a las 3 IPs</span>
+}</pre>
+      <p>El DNS interno de compose devuelve las direcciones de las tres réplicas bajo el mismo nombre. Nginx reparte entre ellas sin saber cuántas hay.</p>
+      <div class="card amber">
+        <p style="margin:0">Ojo: nginx resuelve el nombre <strong>al arrancar</strong>. Si escalan con nginx ya levantado, hay que recargarlo — <code class="inline">docker compose restart nginx</code>. En producción esto se resuelve con un <code class="inline">resolver</code> y variables.</p>
+      </div>
+    </section>
 
-gzip on;                        <span class="c"># HTML y CSS viajan comprimidos</span>
-gzip_types text/css application/json application/javascript;</pre>
-      <p class="muted">Ninguna de estas líneas es lógica de la biblioteca. Todas protegen o aceleran <strong>cualquier</strong> sitio — y por eso viven en nginx y no en <code class="inline">main.py</code>.</p>
+    <!-- 33 · despliegue sin caída -->
+    <section class="slide" data-layer="balanceo">
+      <div class="eyebrow">Bloque 5 · La recompensa</div>
+      <h2>Actualizar sin que el sitio se caiga</h2>
+      <div class="flow">
+        <span class="n">baja web_1</span><span class="a">→</span>
+        <span class="n">nginx la saca</span><span class="a">→</span>
+        <span class="n">sube nueva</span><span class="a">→</span>
+        <span class="n fill">repetir con web_2</span>
+      </div>
+      <p class="lead">Mientras una réplica se actualiza, las otras dos atienden. El usuario no percibe nada.</p>
+      <p>Es la razón práctica por la que se replica: no es solo aguantar más carga, es poder <em class="hl">tocar el sistema mientras está vivo</em>.</p>
     </section>
 
   </main>

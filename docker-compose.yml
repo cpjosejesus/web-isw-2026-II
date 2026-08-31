@@ -16,6 +16,7 @@ services:
   web:
     build: .
     # expose, no ports: visible en la red interna, no desde el host.
+    # Se levanta con: docker compose up -d --scale web=3
     expose:
       - "8000"
     environment:
