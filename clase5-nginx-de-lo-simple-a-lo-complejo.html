@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>El portero del sitio - Nginx, de lo simple a lo complejo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E4E7E2;
+    --paper-2:#DADFD9;
+    --ink:#10201F;
+    --ink-soft:rgba(16,32,31,.62);
+    --teal:#0E6560;
+    --plum:#7A2A55;
+    --amber:#C98A0E;
+    --rule:rgba(16,32,31,.16);
+    --spine-w:200px;
+    --pad:clamp(20px,4.2vw,72px);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    font-size:16px;
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+  /* ---------- estructura ---------- */
+  .deck{display:flex;height:100vh;height:100dvh;width:100%}
+  .spine{
+    width:var(--spine-w);flex:0 0 var(--spine-w);
+    border-right:1px solid var(--rule);
+    padding:var(--pad) 0 0 clamp(14px,2vw,26px);
+    display:flex;flex-direction:column;justify-content:flex-end;
+    padding-bottom:clamp(18px,3vw,34px);
+    background:linear-gradient(180deg,transparent,rgba(14,101,96,.05));
+  }
+  .spine-title{
+    font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--ink-soft);margin-bottom:14px;
+  }
+  .layer{
+    position:relative;padding:7px 0 7px 18px;
+    font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--ink-soft);opacity:.45;
+    transition:opacity .35s ease,color .35s ease;
+  }
+  .layer::before{
+    content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
+    width:7px;height:7px;border:1px solid currentColor;border-radius:50%;
+    transition:background .35s ease,transform .35s ease;
+  }
+  .layer.done{opacity:.7}
+  .layer.done::before{background:currentColor}
+  .layer.on{opacity:1;color:var(--teal);font-weight:600}
+  .layer.on::before{background:var(--teal);transform:translateY(-50%) scale(1.6)}
+  .spine-foot{
+    margin-top:auto;padding-top:20px;font-family:"IBM Plex Mono",monospace;
+    font-size:10px;color:var(--ink-soft);letter-spacing:.06em;
+  }
+
+  .stage{position:relative;flex:1;min-width:0;overflow:hidden}
+  .slide{
+    position:absolute;inset:0;padding:var(--pad);
+    display:none;flex-direction:column;justify-content:center;
+    overflow-y:auto;
+  }
+  .slide.active{display:flex;animation:enter .45s cubic-bezier(.2,.7,.3,1)}
+  @keyframes enter{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){
+    .slide.active{animation:none}
+    .layer,.layer::before{transition:none}
+  }
+
+  /* ---------- tipografía ---------- */
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--teal);margin-bottom:16px;
+  }
+  h1{
+    font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;
+    font-weight:800;font-size:clamp(34px,6.4vw,80px);line-height:.98;
+    letter-spacing:-.02em;margin:0 0 20px;
+  }
+  h2{
+    font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;
+    font-weight:700;font-size:clamp(26px,3.9vw,48px);line-height:1.04;
+    letter-spacing:-.015em;margin:0 0 22px;max-width:22ch;
+  }
+  h3{
+    font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;
+    font-weight:700;font-size:clamp(16px,1.5vw,20px);margin:0 0 10px;
+  }
+  p{margin:0 0 14px;font-size:clamp(14px,1.35vw,19px);line-height:1.55;max-width:60ch}
+  .lead{font-size:clamp(16px,1.7vw,23px);color:var(--ink)}
+  .muted{color:var(--ink-soft)}
+  strong{font-weight:600}
+  em.hl{font-style:normal;background:linear-gradient(transparent 62%,rgba(201,138,14,.35) 62%)}
+  .plum{color:var(--plum)}
+  .teal{color:var(--teal)}
+
+  ul.bullets{list-style:none;margin:0;padding:0;max-width:64ch}
+  ul.bullets li{
+    position:relative;padding-left:26px;margin-bottom:14px;
+    font-size:clamp(14px,1.35vw,19px);line-height:1.5;
+  }
+  ul.bullets li::before{
+    content:"";position:absolute;left:0;top:.62em;width:12px;height:1px;background:var(--teal)
+  }
+
+  /* ---------- piezas ---------- */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:clamp(16px,2.4vw,40px);align-items:start}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(12px,1.8vw,26px);align-items:start}
+  .card{
+    border:1px solid var(--rule);background:rgba(255,255,255,.42);
+    padding:clamp(14px,1.7vw,24px);border-radius:2px;
+  }
+  .card.accent{border-left:3px solid var(--teal)}
+  .card.warn{border-left:3px solid var(--plum);background:rgba(122,42,85,.06)}
+  .card.amber{border-left:3px solid var(--amber);background:rgba(201,138,14,.08)}
+
+  table{border-collapse:collapse;width:100%;font-size:clamp(12px,1.15vw,16px)}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{
+    font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-soft);font-weight:500;
+  }
+  td.num{font-family:"IBM Plex Mono",monospace;color:var(--plum);font-weight:500;white-space:nowrap}
+  td.mono{font-family:"IBM Plex Mono",monospace;font-size:.94em}
+  tr.key td{background:rgba(14,101,96,.09)}
+
+  pre{
+    font-family:"IBM Plex Mono",monospace;font-size:clamp(11px,1.05vw,15px);
+    line-height:1.62;background:var(--ink);color:#D6E0DD;
+    padding:clamp(12px,1.5vw,22px);border-radius:3px;overflow-x:auto;margin:0 0 14px;
+  }
+  pre.sm{font-size:clamp(10px,.95vw,13.5px);line-height:1.55}
+  pre .c{color:#6E8B86}
+  pre .s{color:#E3B7A0}
+  pre .k{color:#7FCFC7}
+  pre .n{color:#E0C378}
+  code.inline{
+    font-family:"IBM Plex Mono",monospace;font-size:.9em;
+    background:rgba(16,32,31,.08);padding:1px 5px;border-radius:2px;
+  }
+
+  .stack{display:flex;flex-direction:column-reverse;gap:6px;max-width:640px}
+  .stack .s{
+    border:1px solid var(--rule);padding:10px 16px;background:rgba(255,255,255,.5);
+    font-family:"IBM Plex Mono",monospace;font-size:clamp(11px,1.05vw,14px);
+    display:flex;justify-content:space-between;gap:16px;
+  }
+  .stack .s b{font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+  .stack .s span{color:var(--ink-soft)}
+  .stack .s.hi{background:var(--teal);color:#EAF2F0;border-color:var(--teal)}
+  .stack .s.hi span{color:rgba(255,255,255,.72)}
+
+  .osi{display:flex;flex-direction:column;gap:4px;max-width:900px;width:100%}
+  .osi .lay{
+    display:grid;grid-template-columns:34px 200px 1fr;align-items:center;gap:14px;
+    border:1px solid var(--rule);border-left:3px solid var(--teal);
+    background:rgba(255,255,255,.5);padding:8px 14px;
+  }
+  .osi .lay .num{
+    font-family:"IBM Plex Mono",monospace;font-weight:600;
+    font-size:clamp(12px,1.2vw,16px);color:var(--teal);
+  }
+  .osi .lay .nm{
+    font-family:"Bricolage Grotesque",sans-serif;font-weight:700;
+    font-size:clamp(12px,1.25vw,17px);letter-spacing:-.01em;
+  }
+  .osi .lay .de{font-size:clamp(11px,1.05vw,15px);color:var(--ink-soft);line-height:1.35}
+  .osi .lay.host{border-left-color:var(--plum)}
+  .osi .lay.host .num{color:var(--plum)}
+  .osi .lay.mark{background:rgba(14,101,96,.12)}
+  @media (max-width:860px){
+    .osi .lay{grid-template-columns:26px 1fr;gap:8px}
+    .osi .lay .de{grid-column:2}
+  }
+
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:6px 0 18px}
+  .flow .n{
+    font-family:"IBM Plex Mono",monospace;font-size:clamp(11px,1.1vw,15px);
+    border:1px solid var(--teal);color:var(--teal);padding:7px 14px;border-radius:2px;
+  }
+  .flow .n.plum{border-color:var(--plum);color:var(--plum)}
+  .flow .n.fill{background:var(--teal);color:#EAF2F0}
+  .flow .a{color:var(--ink-soft)}
+
+  .big{
+    font-family:"Bricolage Grotesque",sans-serif;font-weight:800;
+    font-size:clamp(40px,7vw,96px);line-height:1;letter-spacing:-.03em;color:var(--teal);
+  }
+  .acid{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(10px,1.4vw,20px)}
+  .acid .l{
+    font-family:"Bricolage Grotesque",sans-serif;font-weight:800;
+    font-size:clamp(30px,4.4vw,62px);line-height:1;color:var(--plum);
+  }
+
+  /* ---------- topología ---------- */
+  .topo{
+    display:grid;grid-template-columns:auto 1fr;gap:clamp(10px,1.5vw,22px);
+    align-items:center;max-width:920px;margin:4px 0 16px;
+  }
+  .node{
+    border:1px solid var(--rule);background:rgba(255,255,255,.55);
+    padding:10px 16px;border-radius:2px;text-align:center;
+  }
+  .node b{
+    display:block;font-family:"Bricolage Grotesque",sans-serif;font-weight:700;
+    font-size:clamp(12px,1.2vw,17px);
+  }
+  .node span{
+    display:block;font-family:"IBM Plex Mono",monospace;
+    font-size:clamp(9.5px,.92vw,12px);color:var(--ink-soft);margin-top:3px;
+  }
+  .node.edge{border-left:3px solid var(--teal)}
+  .node.app{border-left:3px solid var(--plum)}
+  .fanout{display:flex;flex-direction:column;gap:8px}
+
+  /* ---------- hud ---------- */
+  .hud{
+    position:fixed;right:clamp(12px,2vw,26px);bottom:clamp(10px,1.6vw,20px);
+    display:flex;align-items:center;gap:12px;z-index:5;
+  }
+  .hud button{
+    font-family:"IBM Plex Mono",monospace;font-size:13px;
+    background:none;border:1px solid var(--rule);color:var(--ink);
+    width:32px;height:32px;border-radius:2px;cursor:pointer;line-height:1;
+  }
+  .hud button:hover{background:rgba(14,101,96,.12);border-color:var(--teal)}
+  .hud button:focus-visible,.layer:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .count{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft)}
+  .bar{position:fixed;left:0;bottom:0;height:2px;background:var(--teal);z-index:6;transition:width .3s ease;width:0}
+
+  /* ---------- portada ---------- */
+  .cover h1{max-width:16ch}
+  .cover .rule{width:90px;height:3px;background:var(--plum);margin:0 0 26px}
+  .cover .meta{
+    font-family:"IBM Plex Mono",monospace;font-size:clamp(11px,1.1vw,14px);
+    color:var(--ink-soft);letter-spacing:.06em;line-height:1.9;margin-top:24px;
+  }
+
+  /* ---------- responsive ---------- */
+  @media (max-width:860px){
+    :root{--spine-w:100%}
+    .deck{flex-direction:column}
+    .spine{
+      flex:0 0 auto;width:100%;border-right:none;border-bottom:1px solid var(--rule);
+      flex-direction:row;align-items:center;gap:4px;overflow-x:auto;
+      padding:10px 14px;justify-content:flex-start;
+    }
+    .spine-title,.spine-foot{display:none}
+    .layer{padding:4px 10px 4px 16px;font-size:9.5px;white-space:nowrap}
+    .grid2,.grid3,.acid,.topo{grid-template-columns:1fr}
+    .acid{grid-template-columns:1fr 1fr}
+    .slide{justify-content:flex-start;padding-top:26px;padding-bottom:64px}
+  }
+</style>
+</head>
+<body>
+<div class="deck">
+  <aside class="spine" id="spine">
+    <div class="spine-title">La escalera</div>
+    <div class="layer" data-l="estatico">Estático</div>
+    <div class="layer" data-l="proxy">Proxy inverso</div>
+    <div class="layer" data-l="gunicorn">Gunicorn</div>
+    <div class="layer" data-l="tls">TLS</div>
+    <div class="layer" data-l="balanceo">Balanceo</div>
+    <div class="layer" data-l="cache">Caché</div>
+    <div class="spine-foot">← → para navegar</div>
+  </aside>
+
+  <main class="stage" id="stage">
+
+    <!-- 1 · portada -->
+    <section class="slide cover" data-layer="">
+      <div class="eyebrow">Clase 5 · Unidad 2 · 150 minutos</div>
+      <div class="rule"></div>
+      <h1>El portero<br>del sitio</h1>
+      <p class="lead" style="max-width:47ch">Nginx, de lo simple a lo complejo. Empezamos sirviendo un archivo; terminamos con varias réplicas, TLS y caché delante de la misma <strong>biblioteca</strong>.</p>
+      <div class="meta">
+        ISW-233 · APLICACIONES WEB I · GESTIÓN II/2026<br>
+        Jose Jesus Cabrera Pantoja · UCB Santa Cruz
+      </div>
+    </section>
+
+    <!-- 2 · dónde quedamos -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Dónde quedamos</div>
+      <h2>La aplicación funciona. Nadie de afuera la usa.</h2>
+      <div class="grid2">
+        <div class="card">
+          <h3>Lo que tenemos</h3>
+          <ul class="bullets" style="margin-top:6px">
+            <li>Flask con CRUD completo sobre PostgreSQL</li>
+            <li><code class="inline">docker compose up</code> levanta todo</li>
+            <li>El servidor de desarrollo escuchando en <code class="inline">:8000</code></li>
+          </ul>
+        </div>
+        <div class="card warn">
+          <h3>Lo que falta</h3>
+          <ul class="bullets" style="margin-top:6px">
+            <li>Un solo proceso atiende <strong>una petición a la vez</strong></li>
+            <li>Los archivos estáticos pasan por Python</li>
+            <li>Sin HTTPS, sin límites, sin réplicas</li>
+          </ul>
+        </div>
+      </div>
+      <p class="muted" style="margin-top:18px">Hoy no tocamos <code class="inline">main.py</code> casi nada. Todo lo que agregamos vive <strong>delante</strong> de la aplicación.</p>
+    </section>
+
+    <!-- 3 · plan -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Plan de la clase</div>
+      <h2>Una escalera de seis peldaños</h2>
+      <table>
+        <tr><th>Bloque</th><th>Tema</th><th>Min</th></tr>
+        <tr><td class="num">1</td><td>Nginx sirviendo archivos: el caso más simple</td><td class="num">20</td></tr>
+        <tr><td class="num">2</td><td>Proxy inverso: nginx delante de Flask</td><td class="num">30</td></tr>
+        <tr><td class="num">3</td><td>Gunicorn: quién ejecuta Python de verdad</td><td class="num">25</td></tr>
+        <tr><td class="num">4</td><td>HTTPS y cabeceras: el borde público</td><td class="num">25</td></tr>
+        <tr><td class="num">5</td><td>Balanceo de carga: varias réplicas</td><td class="num">30</td></tr>
+        <tr class="key"><td class="num">6</td><td><strong>Caché y límites: el peldaño más alto</strong></td><td class="num">20</td></tr>
+      </table>
+      <p class="muted" style="margin-top:16px">Cada peldaño agrega <em class="hl">una sola capacidad</em> y deja el anterior funcionando. Ese es el método.</p>
+    </section>
+
+    <!-- 4 · la pregunta -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">La pregunta de hoy</div>
+      <h2>¿Por qué poner otro servidor delante del servidor?</h2>
+      <p class="lead">Suena redundante. Flask ya responde HTTP. ¿Para qué agregar una pieza más?</p>
+      <div class="grid2" style="margin-top:8px">
+        <div class="card">
+          <h3>Flask sabe</h3>
+          <p style="margin:0" class="muted">Tu lógica: qué libro mostrar, qué guardar, qué plantilla renderizar. Eso es lo único que <strong>nadie más puede hacer por vos</strong>.</p>
+        </div>
+        <div class="card accent">
+          <h3>Nginx sabe</h3>
+          <p style="margin:0" class="muted">Miles de conexiones lentas, archivos, TLS, compresión, reintentos, caché. Problemas <strong>idénticos en todos los sitios del mundo</strong>.</p>
+        </div>
+      </div>
+      <p style="margin-top:18px">Poner nginx delante es <em class="hl">dejar de resolver en Python problemas que no son de tu dominio</em>.</p>
+    </section>
+
+    <!-- 5 · dónde encaja en la pila -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Ubicación</div>
+      <h2>Dónde entra nginx en lo que ya conocen</h2>
+      <div class="osi">
+        <div class="lay host mark"><span class="num">7</span><span class="nm">Aplicación</span><span class="de">HTTP — aquí viven nginx y Flask, los dos</span></div>
+        <div class="lay"><span class="num">6·5</span><span class="nm">Presentación / Sesión</span><span class="de">TLS: nginx lo termina, Flask nunca lo ve</span></div>
+        <div class="lay"><span class="num">4</span><span class="nm">Transporte</span><span class="de">TCP — el puerto 80, el 443, el 8000</span></div>
+        <div class="lay"><span class="num">3</span><span class="nm">Red</span><span class="de">IP — la dirección del contenedor</span></div>
+      </div>
+      <p style="margin-top:16px">Nginx <strong>no es una capa nueva</strong>: es otro programa en la misma capa 7. Habla el mismo HTTP que Flask, hacia los dos lados.</p>
+    </section>
+
+    <!-- 6 · peldaño 1 -->
+    <section class="slide" data-layer="estatico">
+      <div class="eyebrow">Bloque 1 · Peldaño 1</div>
+      <h2>Lo más simple que hace nginx: entregar un archivo</h2>
+      <div class="flow">
+        <span class="n">Navegador</span><span class="a">→</span>
+        <span class="n fill">Nginx</span><span class="a">→</span>
+        <span class="n">disco</span>
+      </div>
+      <p class="lead">Sin Python, sin base de datos, sin lógica. Una petición llega, nginx busca el archivo en una carpeta y lo devuelve.</p>
+      <div class="card accent">
+        <p style="margin:0">Este caso ya es útil por sí solo: un sitio de HTML, CSS e imágenes no necesita nada más. Y es la <strong>base</strong> de todo lo que sigue.</p>
+      </div>
+    </section>
+
+    <!-- 7 · primera config -->
+    <section class="slide" data-layer="estatico">
+      <div class="eyebrow">Bloque 1 · Configuración</div>
+      <h2>La configuración mínima, línea por línea</h2>
+<pre><span class="k">server</span> {
+    listen 80;                       <span class="c"># qué puerto atiendo</span>
+    server_name biblioteca.local;    <span class="c"># para qué nombre respondo</span>
+
+    root /var/www/biblioteca;        <span class="c"># dónde busco los archivos</span>
+    index index.html;                <span class="c"># qué devuelvo si piden "/"</span>
+
+    <span class="k">location</span> / {
+        try_files $uri $uri/ =404;   <span class="c"># ¿existe? sirvo. ¿no? 404</span>
+    }
+}</pre>
+      <p class="muted">Siete líneas. <code class="inline">server</code> es un sitio; <code class="inline">location</code> es una regla para un conjunto de URLs. Todo el resto de la clase agrega bloques dentro de esta misma forma.</p>
+    </section>
+
+    <!-- 8 · cómo se traduce una URL -->
+    <section class="slide" data-layer="estatico">
+      <div class="eyebrow">Bloque 1 · El modelo mental</div>
+      <h2>Una URL es una ruta de disco, hasta que deja de serlo</h2>
+<pre>GET /css/estilos.css
+                 <span class="c">│</span>
+      root <span class="s">/var/www/biblioteca</span>  +  uri <span class="s">/css/estilos.css</span>
+                 <span class="c">↓</span>
+      <span class="n">/var/www/biblioteca/css/estilos.css</span></pre>
+      <p>Nginx <strong>concatena</strong> <code class="inline">root</code> con la URI. Si el archivo existe, lo entrega; si no, <code class="inline">try_files</code> decide el siguiente intento.</p>
+      <div class="card warn">
+        <p style="margin:0">El error clásico: usar <code class="inline">alias</code> y <code class="inline">root</code> como si fueran sinónimos. <code class="inline">root</code> <strong>agrega</strong> la URI al camino; <code class="inline">alias</code> la <strong>reemplaza</strong>.</p>
+      </div>
+    </section>
+
+    <!-- 9 · por qué nginx es rápido -->
+    <section class="slide" data-layer="estatico">
+      <div class="eyebrow">Bloque 1 · Por qué importa</div>
+      <h2>Un proceso, diez mil conexiones</h2>
+      <div class="grid2">
+        <div class="card warn">
+          <h3>Flask en desarrollo</h3>
+          <p style="margin:0" class="muted">Un hilo atiende <strong>una petición completa</strong>. Mientras espera, no hace nada más. Cien clientes lentos = cien bloqueos.</p>
+        </div>
+        <div class="card accent">
+          <h3>Nginx</h3>
+          <p style="margin:0" class="muted">Un proceso maneja miles de conexiones con un <strong>bucle de eventos</strong>. Cuando una espera, atiende otra. Nadie bloquea a nadie.</p>
+        </div>
+      </div>
+      <p style="margin-top:18px">Por eso el trabajo se reparte así: nginx aguanta <em class="hl">la multitud</em>, Flask atiende <em class="hl">el pedido</em>.</p>
+    </section>
+
+    <!-- 10 · peldaño 2 -->
+    <section class="slide" data-layer="proxy">
+      <div class="eyebrow">Bloque 2 · Peldaño 2</div>
+      <h2>Un sitio no es solo archivos: entra Flask</h2>
+      <div class="flow">
+        <span class="n">Navegador</span><span class="a">→</span>
+        <span class="n fill">Nginx</span><span class="a">→</span>
+        <span class="n plum">Flask :8000</span><span class="a">→</span>
+        <span class="n plum">PostgreSQL</span>
+      </div>
+      <p class="lead">El catálogo de libros no está en disco: se arma en cada petición. Nginx no puede generarlo, pero sabe <strong>a quién preguntarle</strong>.</p>
+      <p>Eso es un <strong>proxy inverso</strong>: nginx recibe la petición del cliente, la reenvía a otro servidor, y devuelve la respuesta como si fuera propia.</p>
+    </section>
+
+    <!-- 11 · directo vs inverso -->
+    <section class="slide" data-layer="proxy">
+      <div class="eyebrow">Bloque 2 · Distinción</div>
+      <h2>Proxy directo e inverso: de qué lado está</h2>
+      <table>
+        <tr><th></th><th>Proxy directo</th><th>Proxy inverso</th></tr>
+        <tr><td class="num">Sirve a</td><td>El <strong>cliente</strong></td><td>El <strong>servidor</strong></td></tr>
+        <tr><td class="num">Lo configura</td><td>Quien navega</td><td>Quien publica el sitio</td></tr>
+        <tr><td class="num">Oculta</td><td>Quién es el cliente</td><td>Cómo es el backend</td></tr>
+        <tr><td class="num">Ejemplo</td><td>El proxy de una empresa</td><td class="mono">nginx delante de Flask</td></tr>
+        <tr class="key"><td class="num">El cliente</td><td>Sabe que hay un proxy</td><td><strong>No se entera de nada</strong></td></tr>
+      </table>
+      <p class="muted" style="margin-top:16px">Para el navegador, nginx <em class="hl">es</em> el sitio. Que por detrás haya uno o veinte procesos de Flask es asunto nuestro.</p>
+    </section>
+
+    <!-- 12 · config proxy -->
+    <section class="slide" data-layer="proxy">
+      <div class="eyebrow">Bloque 2 · Configuración</div>
+      <h2>Reenviar a Flask</h2>
+<pre><span class="k">server</span> {
+    listen 80;
+    server_name biblioteca.local;
+
+    <span class="k">location</span> /static/ {
+        alias /var/www/biblioteca/static/;   <span class="c"># esto lo sirve nginx</span>
+        expires 30d;                         <span class="c"># y el navegador lo guarda</span>
+    }
+
+    <span class="k">location</span> / {
+        proxy_pass http://<span class="s">web</span>:8000;             <span class="c"># todo lo demás, a Flask</span>
+    }
+}</pre>
+      <p class="muted">Dos <code class="inline">location</code>. Nginx elige el <strong>más específico</strong> que coincida: <code class="inline">/static/estilos.css</code> va al disco, <code class="inline">/libros/3</code> va a Flask.</p>
+    </section>
+
+    <!-- 13 · el descuido de las cabeceras -->
+    <section class="slide" data-layer="proxy">
+      <div class="eyebrow">Bloque 2 · La trampa</div>
+      <h2>Flask deja de saber quién le habla</h2>
+      <p>Con ese <code class="inline">proxy_pass</code>, todas las peticiones que ve Flask vienen de la IP de nginx, con el nombre de host equivocado. <code class="inline">url_for</code> empieza a generar enlaces rotos.</p>
+<pre><span class="k">location</span> / {
+    proxy_pass http://web:8000;
+
+    proxy_set_header Host              $host;              <span class="c"># el nombre real</span>
+    proxy_set_header X-Real-IP         $remote_addr;       <span class="c"># el cliente real</span>
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;            <span class="c"># http o https</span>
+}</pre>
+      <div class="card accent">
+        <p style="margin:0">Estas cuatro líneas van <strong>siempre</strong>. Son la forma de decirle a la aplicación: «lo que ves viene de mí, pero el cliente original era este».</p>
+      </div>
+    </section>
+
+    <!-- 14 · lado Flask -->
+    <section class="slide" data-layer="proxy">
+      <div class="eyebrow">Bloque 2 · Del otro lado</div>
+      <h2>Y Flask tiene que creerle</h2>
+<pre><span class="c"># main.py</span>
+<span class="k">from</span> werkzeug.middleware.proxy_fix <span class="k">import</span> ProxyFix
+
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=<span class="n">1</span>, x_proto=<span class="n">1</span>, x_host=<span class="n">1</span>)</pre>
+      <p>Sin esto, Flask ignora las cabeceras <code class="inline">X-Forwarded-*</code> — y hace bien: cualquiera puede inventarlas. <code class="inline">ProxyFix</code> le dice <em class="hl">confía, pero solo en un salto</em>.</p>
+      <div class="card warn">
+        <p style="margin:0">Nunca pongan <code class="inline">ProxyFix</code> en una app expuesta directo a internet. Solo tiene sentido cuando hay un proxy de ustedes por delante.</p>
+      </div>
+    </section>
+
+    <!-- 15 · demo compose -->
+    <section class="slide" data-layer="proxy">
+      <div class="eyebrow">Bloque 2 · En la biblioteca</div>
+      <h2>Un servicio más en el compose</h2>
+<pre>services:
+  <span class="k">nginx</span>:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"                                  <span class="c"># el único publicado ahora</span>
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./static:/var/www/biblioteca/static:ro
+    depends_on: [web]
+
+  <span class="k">web</span>:
+    build: .
+    expose:
+      - "8000"                                   <span class="c"># visible en la red interna, NO afuera</span></pre>
+      <p class="muted"><code class="inline">ports</code> publica al host; <code class="inline">expose</code> solo abre dentro de la red de compose. Flask deja de ser alcanzable desde afuera: <em class="hl">esa es la mejora de seguridad</em>.</p>
+    </section>
+
+    <!-- 16 · qué se gana -->
+    <section class="slide" data-layer="proxy">
+      <div class="eyebrow">Bloque 2 · Balance</div>
+      <h2>Qué ganamos en este peldaño</h2>
+      <div class="grid3">
+        <div class="card accent">
+          <h3>Estáticos</h3>
+          <p style="margin:0" class="muted">El CSS ya no pasa por Python. Nginx lo lee del disco y lo cachea el navegador.</p>
+        </div>
+        <div class="card accent">
+          <h3>Un solo puerto</h3>
+          <p style="margin:0" class="muted">El 80 hacia afuera. La aplicación queda escondida en la red interna.</p>
+        </div>
+        <div class="card accent">
+          <h3>Punto de control</h3>
+          <p style="margin:0" class="muted">Un lugar donde después pondremos TLS, límites, caché y balanceo.</p>
+        </div>
+      </div>
+      <p style="margin-top:18px">Pero el problema de fondo sigue: detrás de nginx todavía hay <em class="hl">un servidor de desarrollo</em>.</p>
+    </section>
+
+    <!-- 17 · peldaño 3 -->
+    <section class="slide" data-layer="gunicorn">
+      <div class="eyebrow">Bloque 3 · Peldaño 3</div>
+      <h2>Ese aviso que ignoramos cuatro clases</h2>
+<pre class="sm"><span class="c">WARNING: This is a development server.
+Do not use it in a production deployment.
+Use a production WSGI server instead.</span></pre>
+      <p class="lead">No es una formalidad. El servidor de <code class="inline">flask run</code> es un solo proceso, sin límites, sin reinicio ante fallos, pensado para que veas tu cambio al guardar.</p>
+      <p class="muted">Hoy le hacemos caso.</p>
+    </section>
+
+    <!-- 18 · qué es WSGI -->
+    <section class="slide" data-layer="gunicorn">
+      <div class="eyebrow">Bloque 3 · El contrato</div>
+      <h2>WSGI: el enchufe entre el servidor y tu código</h2>
+      <div class="flow">
+        <span class="n fill">Nginx</span><span class="a">HTTP →</span>
+        <span class="n">Gunicorn</span><span class="a">WSGI →</span>
+        <span class="n plum">app de Flask</span>
+      </div>
+      <p>Flask no sabe hablar HTTP crudo con el mundo. Sabe cumplir un <strong>contrato de Python</strong>: recibir un diccionario con la petición y devolver una respuesta.</p>
+      <div class="card accent">
+        <p style="margin:0">Gunicorn es quien traduce: abre sockets, parsea HTTP, y llama a tu <code class="inline">app</code> como una función. Por eso podés cambiar de servidor <em class="hl">sin tocar una línea de Flask</em>.</p>
+      </div>
+    </section>
+
+    <!-- 19 · tres piezas -->
+    <section class="slide" data-layer="gunicorn">
+      <div class="eyebrow">Bloque 3 · Los tres roles</div>
+      <h2>Quién hace qué, ahora que son tres</h2>
+      <div class="stack" style="max-width:720px">
+        <div class="s"><b>PostgreSQL</b><span>guarda las filas</span></div>
+        <div class="s"><b>Flask</b><span>decide qué responder — tu dominio</span></div>
+        <div class="s"><b>Gunicorn</b><span>ejecuta Python en varios procesos, los reinicia si mueren</span></div>
+        <div class="s hi"><b>Nginx</b><span>habla con internet: conexiones, archivos, TLS</span></div>
+      </div>
+      <p style="margin-top:20px">Cada pieza resuelve <em class="hl">un problema distinto</em>. Confundirlos es el origen de casi todo el dolor de despliegue.</p>
+    </section>
+
+    <!-- 20 · gunicorn config -->
+    <section class="slide" data-layer="gunicorn">
+      <div class="eyebrow">Bloque 3 · Configuración</div>
+      <h2>Cómo se levanta Gunicorn</h2>
+<pre>gunicorn --workers <span class="n">4</span> \
+         --bind <span class="s">0.0.0.0:8000</span> \
+         --timeout <span class="n">30</span> \
+         --access-logfile - \
+         main:app                     <span class="c"># módulo : objeto Flask</span></pre>
+      <table style="margin-top:6px">
+        <tr><th>Opción</th><th>Qué hace</th></tr>
+        <tr><td class="mono">--workers</td><td>Procesos que atienden en paralelo. Regla inicial: <code class="inline">2 × núcleos + 1</code></td></tr>
+        <tr><td class="mono">--bind 0.0.0.0</td><td>Escucha en todas las interfaces del contenedor, para que nginx llegue</td></tr>
+        <tr><td class="mono">--timeout</td><td>Mata al worker que se cuelga más de 30 s y lo reemplaza</td></tr>
+      </table>
+    </section>
+
+    <!-- 21 · dockerfile -->
+    <section class="slide" data-layer="gunicorn">
+      <div class="eyebrow">Bloque 3 · En la biblioteca</div>
+      <h2>El Dockerfile cambia una línea</h2>
+<pre>FROM python:3.13-slim
+WORKDIR /app
+COPY pyproject.toml uv.lock ./
+RUN pip install uv && uv sync --frozen
+COPY . .
+
+<span class="c"># antes:</span>
+<span class="c"># CMD ["flask", "run", "--host=0.0.0.0", "--port=8000"]</span>
+
+CMD [<span class="s">"gunicorn"</span>, <span class="s">"--workers"</span>, <span class="s">"4"</span>, <span class="s">"--bind"</span>, <span class="s">"0.0.0.0:8000"</span>, <span class="s">"main:app"</span>]</pre>
+      <p class="muted">Nada más se mueve: ni las rutas, ni los modelos, ni las plantillas. El contrato WSGI hace que el cambio sea <em class="hl">de una línea</em>.</p>
+    </section>
+
+    <!-- 22 · workers y estado -->
+    <section class="slide" data-layer="gunicorn">
+      <div class="eyebrow">Bloque 3 · La consecuencia</div>
+      <h2>Cuatro workers son cuatro memorias distintas</h2>
+      <p class="lead">Cada worker es un <strong>proceso separado</strong>. No comparten variables. La petición siguiente puede caer en otro worker.</p>
+      <div class="grid2">
+        <div class="card warn">
+          <h3>Deja de funcionar</h3>
+          <ul class="bullets" style="margin-top:6px">
+            <li>Un contador en una variable global</li>
+            <li>Una lista en memoria como «base de datos»</li>
+            <li>Un archivo subido guardado en el disco del contenedor</li>
+          </ul>
+        </div>
+        <div class="card accent">
+          <h3>Sigue funcionando</h3>
+          <ul class="bullets" style="margin-top:6px">
+            <li>Todo lo que está en <strong>PostgreSQL</strong></li>
+            <li>La sesión de Flask, firmada en una cookie</li>
+            <li>Lo que se recalcula en cada petición</li>
+          </ul>
+        </div>
+      </div>
+      <p class="muted" style="margin-top:16px">Por eso insistimos desde la clase 3 en mover el estado a la base. <em class="hl">Este es el momento en que esa decisión se cobra.</em></p>
+    </section>
+
+    <!-- 23 · peldaño 4 -->
+    <section class="slide" data-layer="tls">
+      <div class="eyebrow">Bloque 4 · Peldaño 4</div>
+      <h2>Todo lo que enviamos viaja en texto plano</h2>
+      <div class="flow">
+        <span class="n plum">POST /libros/crear</span><span class="a">→ cualquiera en la red lo lee →</span>
+        <span class="n plum">título, autor, cookie de sesión</span>
+      </div>
+      <p class="lead">La cookie de sesión que firmamos en la clase 4 viaja en cada petición. Sin TLS, robarla es <strong>escuchar</strong>.</p>
+      <p>HTTPS es HTTP dentro de un túnel cifrado. Y ese túnel lo termina nginx, no Flask.</p>
+    </section>
+
+    <!-- 24 · terminación TLS -->
+    <section class="slide" data-layer="tls">
+      <div class="eyebrow">Bloque 4 · El modelo</div>
+      <h2>Terminación TLS: el cifrado se abre en el borde</h2>
+      <div class="flow">
+        <span class="n">Navegador</span><span class="a">— HTTPS cifrado →</span>
+        <span class="n fill">Nginx</span><span class="a">— HTTP en red interna →</span>
+        <span class="n plum">Gunicorn</span>
+      </div>
+      <p>Nginx guarda el certificado y la clave privada, descifra, y reenvía en claro por una red que <strong>solo existe dentro de compose</strong>.</p>
+      <div class="card accent">
+        <p style="margin:0">Ventaja concreta: el certificado se renueva y se configura <em class="hl">en un solo lugar</em>, aunque haya veinte réplicas de la aplicación detrás.</p>
+      </div>
+    </section>
+
+    <!-- 25 · config tls -->
+    <section class="slide" data-layer="tls">
+      <div class="eyebrow">Bloque 4 · Configuración</div>
+      <h2>Dos <code class="inline" style="font-size:.68em">server</code>: uno redirige, otro atiende</h2>
+<pre><span class="k">server</span> {
+    listen 80;
+    server_name biblioteca.ucb.edu.bo;
+    return <span class="n">301</span> https://$host$request_uri;   <span class="c"># nadie se queda en http</span>
+}
+
+<span class="k">server</span> {
+    listen 443 ssl;
+    server_name biblioteca.ucb.edu.bo;
+
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    <span class="k">location</span> / { proxy_pass http://web:8000; <span class="c">/* + las 4 cabeceras */</span> }
+}</pre>
+      <p class="muted">El <code class="inline">301</code> es permanente: el navegador lo recuerda y la próxima vez ni intenta por HTTP.</p>
+    </section>
+
+    <!-- 26 · certificados -->
+    <section class="slide" data-layer="tls">
+      <div class="eyebrow">Bloque 4 · De dónde sale el certificado</div>
+      <h2>Autofirmado para aprender, Let's Encrypt para publicar</h2>
+      <div class="grid2">
+        <div class="card">
+          <h3>En su máquina</h3>
+<pre class="sm" style="margin:8px 0 0">openssl req -x509 -newkey rsa:2048 \
+  -keyout privkey.pem -out fullchain.pem \
+  -days 365 -nodes \
+  -subj "/CN=localhost"</pre>
+          <p class="muted" style="margin:10px 0 0;font-size:.92em">El navegador va a advertir. Es correcto: nadie lo avala.</p>
+        </div>
+        <div class="card accent">
+          <h3>En un dominio real</h3>
+          <p style="margin:0" class="muted">Certbot pide el certificado a Let's Encrypt, que verifica que el dominio es suyo sirviendo un archivo bajo <code class="inline">/.well-known/</code>. Gratis y automático, cada 90 días.</p>
+        </div>
+      </div>
+      <p class="muted" style="margin-top:16px">Un certificado no dice que el sitio sea bueno. Solo dice que <em class="hl">el dominio es de quien dice ser</em>.</p>
+    </section>
+
+    <!-- 27 · cabeceras y límites -->
+    <section class="slide" data-layer="tls">
+      <div class="eyebrow">Bloque 4 · El borde</div>
+      <h2>Cosas que se resuelven una vez, para todo el sitio</h2>
+<pre>add_header Strict-Transport-Security <span class="s">"max-age=31536000"</span> always;
+add_header X-Content-Type-Options    <span class="s">"nosniff"</span> always;
+add_header X-Frame-Options           <span class="s">"SAMEORIGIN"</span> always;
+
+client_max_body_size <span class="n">5m</span>;        <span class="c"># nadie sube un archivo de 2 GB</span>
+
+gzip on;                        <span class="c"># HTML y CSS viajan comprimidos</span>
+gzip_types text/css application/json application/javascript;</pre>
+      <p class="muted">Ninguna de estas líneas es lógica de la biblioteca. Todas protegen o aceleran <strong>cualquier</strong> sitio — y por eso viven en nginx y no en <code class="inline">main.py</code>.</p>
+    </section>
+
+    <!-- 28 · peldaño 5 -->
+    <section class="slide" data-layer="balanceo">
+      <div class="eyebrow">Bloque 5 · Peldaño 5</div>
+      <h2>Un contenedor sigue siendo un solo punto de falla</h2>
+      <p class="lead">Gunicorn nos dio cuatro workers, pero todos dentro del mismo contenedor. Si ese contenedor se cae o hay que actualizarlo, el sitio se cae.</p>
+      <div class="flow">
+        <span class="n fill">Nginx</span><span class="a">→</span>
+        <span class="n plum">web_1</span>
+        <span class="n plum">web_2</span>
+        <span class="n plum">web_3</span>
+      </div>
+      <p>La respuesta es la misma idea de siempre, un nivel más arriba: <em class="hl">varias copias, alguien que reparte</em>.</p>
+    </section>
+
+    <!-- 29 · upstream -->
+    <section class="slide" data-layer="balanceo">
+      <div class="eyebrow">Bloque 5 · Configuración</div>
+      <h2>Un grupo de servidores con nombre</h2>
+<pre><span class="k">upstream</span> <span class="n">biblioteca</span> {
+    server web_1:8000;
+    server web_2:8000;
+    server web_3:8000;
+}
+
+<span class="k">server</span> {
+    listen 443 ssl;
+    <span class="k">location</span> / {
+        proxy_pass http://<span class="n">biblioteca</span>;      <span class="c"># ya no un host: un grupo</span>
+    }
+}</pre>
+      <p class="muted">Cambió <strong>una palabra</strong> en <code class="inline">proxy_pass</code>. Todo lo anterior — TLS, cabeceras, estáticos — sigue igual. Así se ve una arquitectura que crece bien.</p>
+    </section>
+
+    <!-- 30 · estrategias -->
+    <section class="slide" data-layer="balanceo">
+      <div class="eyebrow">Bloque 5 · Cómo reparte</div>
+      <h2>Tres formas de elegir a quién le toca</h2>
+      <table>
+        <tr><th>Estrategia</th><th>Directiva</th><th>Cuándo</th></tr>
+        <tr><td><strong>Round-robin</strong></td><td class="mono">(por defecto)</td><td>Uno a cada uno, por turno. Sirve casi siempre.</td></tr>
+        <tr><td><strong>Menos conexiones</strong></td><td class="mono">least_conn;</td><td>Cuando las peticiones duran muy distinto entre sí.</td></tr>
+        <tr><td><strong>Por IP</strong></td><td class="mono">ip_hash;</td><td>Cuando el mismo cliente <strong>debe</strong> caer siempre en el mismo servidor.</td></tr>
+      </table>
+      <div class="card warn" style="margin-top:16px">
+        <p style="margin:0">Si necesitan <code class="inline">ip_hash</code> para que la aplicación funcione, es señal de que hay <em class="hl">estado en la memoria del proceso</em>. La solución de fondo no es el balanceador: es mover ese estado a PostgreSQL.</p>
+      </div>
+    </section>
+
+    <!-- 31 · pesos y salud -->
+    <section class="slide" data-layer="balanceo">
+      <div class="eyebrow">Bloque 5 · Tolerancia a fallos</div>
+      <h2>Qué pasa cuando una réplica se cae</h2>
+<pre><span class="k">upstream</span> biblioteca {
+    least_conn;
+    server web_1:8000 weight=<span class="n">2</span>;                    <span class="c"># máquina más grande</span>
+    server web_2:8000;
+    server web_3:8000 max_fails=<span class="n">3</span> fail_timeout=<span class="n">30s</span>;  <span class="c"># 3 fallos → 30 s afuera</span>
+    server web_4:8000 backup;                       <span class="c"># solo si caen las demás</span>
+}</pre>
+      <p>Nginx marca la réplica caída y <strong>deja de mandarle tráfico</strong>. Pasado el <code class="inline">fail_timeout</code>, prueba de nuevo con una petición.</p>
+      <p class="muted">El usuario no ve un error: ve la respuesta de otra réplica. Eso es <em class="hl">alta disponibilidad</em>, y son cuatro líneas de configuración.</p>
+    </section>
+
+    <!-- 32 · escalar en compose -->
+    <section class="slide" data-layer="balanceo">
+      <div class="eyebrow">Bloque 5 · En la biblioteca</div>
+      <h2>Tres réplicas sin escribir tres servicios</h2>
+<pre>docker compose up -d --scale web=<span class="n">3</span></pre>
+<pre><span class="k">upstream</span> biblioteca {
+    server <span class="s">web</span>:8000;        <span class="c"># compose resuelve "web" a las 3 IPs</span>
+}</pre>
+      <p>El DNS interno de compose devuelve las direcciones de las tres réplicas bajo el mismo nombre. Nginx reparte entre ellas sin saber cuántas hay.</p>
+      <div class="card amber">
+        <p style="margin:0">Ojo: nginx resuelve el nombre <strong>al arrancar</strong>. Si escalan con nginx ya levantado, hay que recargarlo — <code class="inline">docker compose restart nginx</code>. En producción esto se resuelve con un <code class="inline">resolver</code> y variables.</p>
+      </div>
+    </section>
+
+    <!-- 33 · despliegue sin caída -->
+    <section class="slide" data-layer="balanceo">
+      <div class="eyebrow">Bloque 5 · La recompensa</div>
+      <h2>Actualizar sin que el sitio se caiga</h2>
+      <div class="flow">
+        <span class="n">baja web_1</span><span class="a">→</span>
+        <span class="n">nginx la saca</span><span class="a">→</span>
+        <span class="n">sube nueva</span><span class="a">→</span>
+        <span class="n fill">repetir con web_2</span>
+      </div>
+      <p class="lead">Mientras una réplica se actualiza, las otras dos atienden. El usuario no percibe nada.</p>
+      <p>Es la razón práctica por la que se replica: no es solo aguantar más carga, es poder <em class="hl">tocar el sistema mientras está vivo</em>.</p>
+    </section>
+
+    <!-- 34 · peldaño 6 -->
+    <section class="slide" data-layer="cache">
+      <div class="eyebrow">Bloque 6 · Peldaño 6</div>
+      <h2>La petición más rápida es la que nunca llega a Flask</h2>
+      <p class="lead">El catálogo de libros cambia pocas veces al día, pero lo recalculamos en cada visita: consulta a PostgreSQL, objetos, plantilla, HTML. Mil visitas, mil veces el mismo trabajo.</p>
+      <div class="flow">
+        <span class="n">Navegador</span><span class="a">→</span>
+        <span class="n fill">Nginx (¿lo tengo?)</span><span class="a">sí →</span>
+        <span class="n">respuesta guardada</span>
+      </div>
+      <p class="muted">Nginx puede guardar la respuesta de Flask y devolverla él mismo durante unos segundos.</p>
+    </section>
+
+    <!-- 35 · config cache -->
+    <section class="slide" data-layer="cache">
+      <div class="eyebrow">Bloque 6 · Configuración</div>
+      <h2>Caché de respuestas</h2>
+<pre>proxy_cache_path /var/cache/nginx keys_zone=<span class="n">biblio</span>:10m max_size=<span class="n">200m</span>;
+
+<span class="k">location</span> /libros {
+    proxy_pass http://biblioteca;
+
+    proxy_cache <span class="n">biblio</span>;
+    proxy_cache_valid <span class="n">200</span> <span class="n">30s</span>;                 <span class="c"># 30 s de vida</span>
+    proxy_cache_methods GET HEAD;               <span class="c"># jamás POST</span>
+    proxy_cache_use_stale error timeout;        <span class="c"># si Flask cae, sirvo lo viejo</span>
+
+    add_header X-Cache-Status $upstream_cache_status;   <span class="c"># HIT / MISS</span>
+}</pre>
+      <p class="muted">Esa última línea es de oro para depurar: en las DevTools ven <code class="inline">HIT</code> o <code class="inline">MISS</code> en cada respuesta.</p>
+    </section>
+
+    <!-- 36 · qué se puede cachear -->
+    <section class="slide" data-layer="cache">
+      <div class="eyebrow">Bloque 6 · El criterio</div>
+      <h2>Qué se puede cachear y qué nunca</h2>
+      <div class="grid2">
+        <div class="card accent">
+          <h3>Sí</h3>
+          <ul class="bullets" style="margin-top:6px">
+            <li>El catálogo público de libros</li>
+            <li>La ficha de un libro</li>
+            <li>CSS, imágenes, tipografías</li>
+          </ul>
+        </div>
+        <div class="card warn">
+          <h3>No</h3>
+          <ul class="bullets" style="margin-top:6px">
+            <li>Cualquier <code class="inline">POST</code>, <code class="inline">PUT</code> o <code class="inline">DELETE</code></li>
+            <li>Páginas que dependen de <strong>quién</strong> está mirando</li>
+            <li>Todo lo que lleve datos de sesión</li>
+          </ul>
+        </div>
+      </div>
+      <p style="margin-top:18px">La pregunta es siempre la misma: <em class="hl">¿dos usuarios distintos verían exactamente lo mismo?</em> Si la respuesta es no, no se cachea.</p>
+    </section>
+
+    <!-- 37 · rate limiting -->
+    <section class="slide" data-layer="cache">
+      <div class="eyebrow">Bloque 6 · Límites</div>
+      <h2>Un cliente no puede consumir todo el servidor</h2>
+<pre>limit_req_zone $binary_remote_addr zone=<span class="n">general</span>:10m rate=<span class="n">10r/s</span>;
+
+<span class="k">location</span> /libros/crear {
+    limit_req zone=<span class="n">general</span> burst=<span class="n">20</span> nodelay;
+    proxy_pass http://biblioteca;
+}</pre>
+      <p>Diez peticiones por segundo por IP, con tolerancia a ráfagas de veinte. La número veintiuno recibe <code class="inline">503</code> y <strong>nunca llega a Flask</strong>.</p>
+      <div class="card accent">
+        <p style="margin:0">Defender la aplicación en el borde es más barato que defenderla adentro: el trabajo se rechaza <em class="hl">antes</em> de abrir una conexión a PostgreSQL.</p>
+      </div>
+    </section>
+
+    <!-- 38 · la escalera completa -->
+    <section class="slide" data-layer="cache">
+      <div class="eyebrow">Síntesis</div>
+      <h2>La escalera completa</h2>
+      <table>
+        <tr><th>#</th><th>Peldaño</th><th>Qué resuelve</th></tr>
+        <tr><td class="num">1</td><td>Servir estáticos</td><td>Archivos sin pasar por Python</td></tr>
+        <tr><td class="num">2</td><td>Proxy inverso</td><td>Un solo puerto público; la app escondida</td></tr>
+        <tr><td class="num">3</td><td>Gunicorn</td><td>Varios procesos, reinicio ante fallos</td></tr>
+        <tr><td class="num">4</td><td>TLS y cabeceras</td><td>Cifrado y protecciones en un solo lugar</td></tr>
+        <tr><td class="num">5</td><td>Balanceo</td><td>Réplicas, tolerancia a fallos, despliegue sin caída</td></tr>
+        <tr class="key"><td class="num">6</td><td><strong>Caché y límites</strong></td><td><strong>Trabajo que nunca se ejecuta</strong></td></tr>
+      </table>
+      <p class="muted" style="margin-top:16px">Ningún peldaño rompió al anterior. Cada uno agregó una capacidad y dejó el resto en su lugar.</p>
+    </section>
+
+    <!-- 39 · depurar -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Síntesis · Práctica</div>
+      <h2>Cuando algo falla, tres comandos</h2>
+<pre>docker compose exec nginx nginx -t          <span class="c"># ¿la sintaxis es válida?</span>
+docker compose exec nginx nginx -s reload   <span class="c"># recargar sin cortar conexiones</span>
+docker compose logs -f nginx                <span class="c"># ver qué está llegando</span></pre>
+      <p><code class="inline">nginx -t</code> <strong>siempre</strong> antes de recargar: una configuración rota deja el sitio caído. El <code class="inline">reload</code> levanta procesos nuevos y deja terminar a los viejos.</p>
+      <div class="card accent">
+        <p style="margin:0">Para saber de quién es la culpa: si el error es <code class="inline">502 Bad Gateway</code>, nginx está bien y <strong>no pudo hablar con Gunicorn</strong>. Si es <code class="inline">500</code>, la excepción es de su código.</p>
+      </div>
+    </section>
+
+    <!-- 40 · errores frecuentes -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Síntesis</div>
+      <h2>Los seis errores de esta semana</h2>
+      <table>
+        <tr><th>Síntoma</th><th>Causa</th></tr>
+        <tr><td class="mono">502 Bad Gateway</td><td>Gunicorn escucha en <code class="inline">127.0.0.1</code>, no en <code class="inline">0.0.0.0</code></td></tr>
+        <tr><td class="mono">404 en el CSS</td><td>Confundir <code class="inline">root</code> con <code class="inline">alias</code> en <code class="inline">/static/</code></td></tr>
+        <tr><td class="mono">Enlaces a http://</td><td>Faltan las cabeceras <code class="inline">X-Forwarded-*</code> o <code class="inline">ProxyFix</code></td></tr>
+        <tr><td class="mono">Sesión que se pierde</td><td>Estado en memoria del proceso con varios workers</td></tr>
+        <tr><td class="mono">413 al subir</td><td><code class="inline">client_max_body_size</code> por defecto: 1 MB</td></tr>
+        <tr class="key"><td class="mono">Cambios que no se ven</td><td>Editaron el <code class="inline">.conf</code> y no recargaron nginx</td></tr>
+      </table>
+    </section>
+
+    <!-- 41 · la tarea -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Práctica · Sobre La Carta</div>
+      <h2>Lo que deben agregar a su entrega</h2>
+      <ul class="bullets">
+        <li>Un servicio <code class="inline">nginx</code> en el compose; que sea <strong>el único con puerto publicado</strong></li>
+        <li><code class="inline">/static/</code> servido por nginx, el resto por proxy a la aplicación</li>
+        <li>Gunicorn en el <code class="inline">CMD</code> del Dockerfile, con al menos dos workers</li>
+        <li>Las cuatro cabeceras de proxy y <code class="inline">ProxyFix</code> del lado de Flask</li>
+        <li>Levantar con <code class="inline">--scale web=2</code> y demostrar que <strong>sigue funcionando</strong></li>
+      </ul>
+      <p class="muted" style="margin-top:8px">Se evalúa lo mismo de siempre: que <code class="inline">docker compose up</code> alcance, y que cada pieza esté donde le corresponde.</p>
+    </section>
+
+    <!-- 42 · lo que viene -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">La próxima clase</div>
+      <h2>El problema que dejamos pendiente</h2>
+      <p class="lead">Seguimos sin poder cambiar el esquema sin borrar la base. <code class="inline">db.create_all()</code> no crea columnas nuevas en tablas que ya existen.</p>
+      <div class="flow">
+        <span class="n">db.create_all()</span><span class="a">no alcanza →</span>
+        <span class="n">migraciones</span>
+      </div>
+      <p class="muted">La próxima clase: <strong>Flask-Migrate y Alembic</strong> — versionar el esquema como versionamos el código. Ahora con más razón: con tres réplicas corriendo, no se puede «borrar y volver a crear».</p>
+    </section>
+
+    <!-- 43 · cierre -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Cierre</div>
+      <h2>La idea de hoy en una línea</h2>
+      <div class="stack">
+        <div class="s"><b>PostgreSQL</b><span>guarda el estado</span></div>
+        <div class="s"><b>Flask</b><span>decide qué responder</span></div>
+        <div class="s"><b>Gunicorn</b><span>lo ejecuta muchas veces a la vez</span></div>
+        <div class="s hi"><b>Nginx</b><span>habla con el mundo: archivos, TLS, réplicas, caché</span></div>
+      </div>
+      <p style="margin-top:20px">Escalar no fue reescribir la aplicación. Fue <em class="hl">poner las piezas correctas alrededor</em> de una aplicación que ya hacía bien su única tarea.</p>
+    </section>
+
+  </main>
+</div>
+
+<div class="bar" id="bar"></div>
+<div class="hud">
+  <button id="prev" aria-label="Anterior">←</button>
+  <button id="next" aria-label="Siguiente">→</button>
+  <span class="count" id="count">1 / 1</span>
+</div>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var layers = Array.prototype.slice.call(document.querySelectorAll('.layer'));
+  var order  = ['estatico','proxy','gunicorn','tls','balanceo','cache'];
+  var i = 0;
+
+  function paintSpine(key){
+    var idx = order.indexOf(key);
+    layers.forEach(function(el){
+      var k = el.getAttribute('data-l');
+      var p = order.indexOf(k);
+      el.classList.remove('on','done');
+      if(idx === -1) return;
+      if(p < idx) el.classList.add('done');
+      if(p === idx) el.classList.add('on');
+    });
+  }
+
+  function show(n){
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function(s, k){ s.classList.toggle('active', k === i); });
+    slides[i].scrollTop = 0;
+    paintSpine(slides[i].getAttribute('data-layer') || '');
+    document.getElementById('count').textContent = (i + 1) + ' / ' + slides.length;
+    document.getElementById('bar').style.width = ((i) / (slides.length - 1) * 100) + '%';
+    try { location.hash = i + 1; } catch(e){}
+  }
+
+  document.getElementById('next').addEventListener('click', function(){ show(i + 1); });
+  document.getElementById('prev').addEventListener('click', function(){ show(i - 1); });
+
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' '){ e.preventDefault(); show(i + 1); }
+    else if(e.key === 'ArrowLeft' || e.key === 'PageUp'){ e.preventDefault(); show(i - 1); }
+    else if(e.key === 'Home'){ show(0); }
+    else if(e.key === 'End'){ show(slides.length - 1); }
+    else if(e.key === 'f' || e.key === 'F'){
+      if(!document.fullscreenElement){ document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); }
+      else { document.exitFullscreen(); }
+    }
+  });
+
+  var x0 = null;
+  document.addEventListener('touchstart', function(e){ x0 = e.changedTouches[0].clientX; }, {passive:true});
+  document.addEventListener('touchend', function(e){
+    if(x0 === null) return;
+    var dx = e.changedTouches[0].clientX - x0;
+    if(Math.abs(dx) > 60){ show(dx < 0 ? i + 1 : i - 1); }
+    x0 = null;
+  }, {passive:true});
+
+  var start = parseInt((location.hash || '').replace('#',''), 10);
+  show(isNaN(start) ? 0 : start - 1);
+})();
+</script>
+</body>
+</html>
