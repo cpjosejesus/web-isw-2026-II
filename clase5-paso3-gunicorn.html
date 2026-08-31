@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Paso 2 - Proxy inverso</title>
+<title>Paso 3 - Gunicorn y WSGI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -267,7 +267,7 @@
 <body>
 <div class="deck">
   <aside class="spine" id="spine">
-    <div class="spine-title">Peldano 2</div>
+    <div class="spine-title">Peldano 3</div>
     <div class="layer" data-l="estatico">Estático</div>
     <div class="layer" data-l="proxy">Proxy inverso</div>
     <div class="layer" data-l="gunicorn">Gunicorn</div>
@@ -279,127 +279,103 @@
 
   <main class="stage" id="stage">
 
-    <!-- 10 · peldaño 2 -->
-    <section class="slide" data-layer="proxy">
-      <div class="eyebrow">Bloque 2 · Peldaño 2</div>
-      <h2>Un sitio no es solo archivos: entra Flask</h2>
+    <!-- 17 · peldaño 3 -->
+    <section class="slide" data-layer="gunicorn">
+      <div class="eyebrow">Bloque 3 · Peldaño 3</div>
+      <h2>Ese aviso que ignoramos cuatro clases</h2>
+<pre class="sm"><span class="c">WARNING: This is a development server.
+Do not use it in a production deployment.
+Use a production WSGI server instead.</span></pre>
+      <p class="lead">No es una formalidad. El servidor de <code class="inline">flask run</code> es un solo proceso, sin límites, sin reinicio ante fallos, pensado para que veas tu cambio al guardar.</p>
+      <p class="muted">Hoy le hacemos caso.</p>
+    </section>
+
+    <!-- 18 · qué es WSGI -->
+    <section class="slide" data-layer="gunicorn">
+      <div class="eyebrow">Bloque 3 · El contrato</div>
+      <h2>WSGI: el enchufe entre el servidor y tu código</h2>
       <div class="flow">
-        <span class="n">Navegador</span><span class="a">→</span>
-        <span class="n fill">Nginx</span><span class="a">→</span>
-        <span class="n plum">Flask :8000</span><span class="a">→</span>
-        <span class="n plum">PostgreSQL</span>
+        <span class="n fill">Nginx</span><span class="a">HTTP →</span>
+        <span class="n">Gunicorn</span><span class="a">WSGI →</span>
+        <span class="n plum">app de Flask</span>
       </div>
-      <p class="lead">El catálogo de libros no está en disco: se arma en cada petición. Nginx no puede generarlo, pero sabe <strong>a quién preguntarle</strong>.</p>
-      <p>Eso es un <strong>proxy inverso</strong>: nginx recibe la petición del cliente, la reenvía a otro servidor, y devuelve la respuesta como si fuera propia.</p>
-    </section>
-
-    <!-- 11 · directo vs inverso -->
-    <section class="slide" data-layer="proxy">
-      <div class="eyebrow">Bloque 2 · Distinción</div>
-      <h2>Proxy directo e inverso: de qué lado está</h2>
-      <table>
-        <tr><th></th><th>Proxy directo</th><th>Proxy inverso</th></tr>
-        <tr><td class="num">Sirve a</td><td>El <strong>cliente</strong></td><td>El <strong>servidor</strong></td></tr>
-        <tr><td class="num">Lo configura</td><td>Quien navega</td><td>Quien publica el sitio</td></tr>
-        <tr><td class="num">Oculta</td><td>Quién es el cliente</td><td>Cómo es el backend</td></tr>
-        <tr><td class="num">Ejemplo</td><td>El proxy de una empresa</td><td class="mono">nginx delante de Flask</td></tr>
-        <tr class="key"><td class="num">El cliente</td><td>Sabe que hay un proxy</td><td><strong>No se entera de nada</strong></td></tr>
-      </table>
-      <p class="muted" style="margin-top:16px">Para el navegador, nginx <em class="hl">es</em> el sitio. Que por detrás haya uno o veinte procesos de Flask es asunto nuestro.</p>
-    </section>
-
-    <!-- 12 · config proxy -->
-    <section class="slide" data-layer="proxy">
-      <div class="eyebrow">Bloque 2 · Configuración</div>
-      <h2>Reenviar a Flask</h2>
-<pre><span class="k">server</span> {
-    listen 80;
-    server_name biblioteca.local;
-
-    <span class="k">location</span> /static/ {
-        alias /var/www/biblioteca/static/;   <span class="c"># esto lo sirve nginx</span>
-        expires 30d;                         <span class="c"># y el navegador lo guarda</span>
-    }
-
-    <span class="k">location</span> / {
-        proxy_pass http://<span class="s">web</span>:8000;             <span class="c"># todo lo demás, a Flask</span>
-    }
-}</pre>
-      <p class="muted">Dos <code class="inline">location</code>. Nginx elige el <strong>más específico</strong> que coincida: <code class="inline">/static/estilos.css</code> va al disco, <code class="inline">/libros/3</code> va a Flask.</p>
-    </section>
-
-    <!-- 13 · el descuido de las cabeceras -->
-    <section class="slide" data-layer="proxy">
-      <div class="eyebrow">Bloque 2 · La trampa</div>
-      <h2>Flask deja de saber quién le habla</h2>
-      <p>Con ese <code class="inline">proxy_pass</code>, todas las peticiones que ve Flask vienen de la IP de nginx, con el nombre de host equivocado. <code class="inline">url_for</code> empieza a generar enlaces rotos.</p>
-<pre><span class="k">location</span> / {
-    proxy_pass http://web:8000;
-
-    proxy_set_header Host              $host;              <span class="c"># el nombre real</span>
-    proxy_set_header X-Real-IP         $remote_addr;       <span class="c"># el cliente real</span>
-    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;            <span class="c"># http o https</span>
-}</pre>
+      <p>Flask no sabe hablar HTTP crudo con el mundo. Sabe cumplir un <strong>contrato de Python</strong>: recibir un diccionario con la petición y devolver una respuesta.</p>
       <div class="card accent">
-        <p style="margin:0">Estas cuatro líneas van <strong>siempre</strong>. Son la forma de decirle a la aplicación: «lo que ves viene de mí, pero el cliente original era este».</p>
+        <p style="margin:0">Gunicorn es quien traduce: abre sockets, parsea HTTP, y llama a tu <code class="inline">app</code> como una función. Por eso podés cambiar de servidor <em class="hl">sin tocar una línea de Flask</em>.</p>
       </div>
     </section>
 
-    <!-- 14 · lado Flask -->
-    <section class="slide" data-layer="proxy">
-      <div class="eyebrow">Bloque 2 · Del otro lado</div>
-      <h2>Y Flask tiene que creerle</h2>
-<pre><span class="c"># main.py</span>
-<span class="k">from</span> werkzeug.middleware.proxy_fix <span class="k">import</span> ProxyFix
-
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=<span class="n">1</span>, x_proto=<span class="n">1</span>, x_host=<span class="n">1</span>)</pre>
-      <p>Sin esto, Flask ignora las cabeceras <code class="inline">X-Forwarded-*</code> — y hace bien: cualquiera puede inventarlas. <code class="inline">ProxyFix</code> le dice <em class="hl">confía, pero solo en un salto</em>.</p>
-      <div class="card warn">
-        <p style="margin:0">Nunca pongan <code class="inline">ProxyFix</code> en una app expuesta directo a internet. Solo tiene sentido cuando hay un proxy de ustedes por delante.</p>
+    <!-- 19 · tres piezas -->
+    <section class="slide" data-layer="gunicorn">
+      <div class="eyebrow">Bloque 3 · Los tres roles</div>
+      <h2>Quién hace qué, ahora que son tres</h2>
+      <div class="stack" style="max-width:720px">
+        <div class="s"><b>PostgreSQL</b><span>guarda las filas</span></div>
+        <div class="s"><b>Flask</b><span>decide qué responder — tu dominio</span></div>
+        <div class="s"><b>Gunicorn</b><span>ejecuta Python en varios procesos, los reinicia si mueren</span></div>
+        <div class="s hi"><b>Nginx</b><span>habla con internet: conexiones, archivos, TLS</span></div>
       </div>
+      <p style="margin-top:20px">Cada pieza resuelve <em class="hl">un problema distinto</em>. Confundirlos es el origen de casi todo el dolor de despliegue.</p>
     </section>
 
-    <!-- 15 · demo compose -->
-    <section class="slide" data-layer="proxy">
-      <div class="eyebrow">Bloque 2 · En la biblioteca</div>
-      <h2>Un servicio más en el compose</h2>
-<pre>services:
-  <span class="k">nginx</span>:
-    image: nginx:1.27-alpine
-    ports:
-      - "80:80"                                  <span class="c"># el único publicado ahora</span>
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./static:/var/www/biblioteca/static:ro
-    depends_on: [web]
-
-  <span class="k">web</span>:
-    build: .
-    expose:
-      - "8000"                                   <span class="c"># visible en la red interna, NO afuera</span></pre>
-      <p class="muted"><code class="inline">ports</code> publica al host; <code class="inline">expose</code> solo abre dentro de la red de compose. Flask deja de ser alcanzable desde afuera: <em class="hl">esa es la mejora de seguridad</em>.</p>
+    <!-- 20 · gunicorn config -->
+    <section class="slide" data-layer="gunicorn">
+      <div class="eyebrow">Bloque 3 · Configuración</div>
+      <h2>Cómo se levanta Gunicorn</h2>
+<pre>gunicorn --workers <span class="n">4</span> \
+         --bind <span class="s">0.0.0.0:8000</span> \
+         --timeout <span class="n">30</span> \
+         --access-logfile - \
+         main:app                     <span class="c"># módulo : objeto Flask</span></pre>
+      <table style="margin-top:6px">
+        <tr><th>Opción</th><th>Qué hace</th></tr>
+        <tr><td class="mono">--workers</td><td>Procesos que atienden en paralelo. Regla inicial: <code class="inline">2 × núcleos + 1</code></td></tr>
+        <tr><td class="mono">--bind 0.0.0.0</td><td>Escucha en todas las interfaces del contenedor, para que nginx llegue</td></tr>
+        <tr><td class="mono">--timeout</td><td>Mata al worker que se cuelga más de 30 s y lo reemplaza</td></tr>
+      </table>
     </section>
 
-    <!-- 16 · qué se gana -->
-    <section class="slide" data-layer="proxy">
-      <div class="eyebrow">Bloque 2 · Balance</div>
-      <h2>Qué ganamos en este peldaño</h2>
-      <div class="grid3">
-        <div class="card accent">
-          <h3>Estáticos</h3>
-          <p style="margin:0" class="muted">El CSS ya no pasa por Python. Nginx lo lee del disco y lo cachea el navegador.</p>
+    <!-- 21 · dockerfile -->
+    <section class="slide" data-layer="gunicorn">
+      <div class="eyebrow">Bloque 3 · En la biblioteca</div>
+      <h2>El Dockerfile cambia una línea</h2>
+<pre>FROM python:3.13-slim
+WORKDIR /app
+COPY pyproject.toml uv.lock ./
+RUN pip install uv && uv sync --frozen
+COPY . .
+
+<span class="c"># antes:</span>
+<span class="c"># CMD ["flask", "run", "--host=0.0.0.0", "--port=8000"]</span>
+
+CMD [<span class="s">"gunicorn"</span>, <span class="s">"--workers"</span>, <span class="s">"4"</span>, <span class="s">"--bind"</span>, <span class="s">"0.0.0.0:8000"</span>, <span class="s">"main:app"</span>]</pre>
+      <p class="muted">Nada más se mueve: ni las rutas, ni los modelos, ni las plantillas. El contrato WSGI hace que el cambio sea <em class="hl">de una línea</em>.</p>
+    </section>
+
+    <!-- 22 · workers y estado -->
+    <section class="slide" data-layer="gunicorn">
+      <div class="eyebrow">Bloque 3 · La consecuencia</div>
+      <h2>Cuatro workers son cuatro memorias distintas</h2>
+      <p class="lead">Cada worker es un <strong>proceso separado</strong>. No comparten variables. La petición siguiente puede caer en otro worker.</p>
+      <div class="grid2">
+        <div class="card warn">
+          <h3>Deja de funcionar</h3>
+          <ul class="bullets" style="margin-top:6px">
+            <li>Un contador en una variable global</li>
+            <li>Una lista en memoria como «base de datos»</li>
+            <li>Un archivo subido guardado en el disco del contenedor</li>
+          </ul>
         </div>
         <div class="card accent">
-          <h3>Un solo puerto</h3>
-          <p style="margin:0" class="muted">El 80 hacia afuera. La aplicación queda escondida en la red interna.</p>
-        </div>
-        <div class="card accent">
-          <h3>Punto de control</h3>
-          <p style="margin:0" class="muted">Un lugar donde después pondremos TLS, límites, caché y balanceo.</p>
+          <h3>Sigue funcionando</h3>
+          <ul class="bullets" style="margin-top:6px">
+            <li>Todo lo que está en <strong>PostgreSQL</strong></li>
+            <li>La sesión de Flask, firmada en una cookie</li>
+            <li>Lo que se recalcula en cada petición</li>
+          </ul>
         </div>
       </div>
-      <p style="margin-top:18px">Pero el problema de fondo sigue: detrás de nginx todavía hay <em class="hl">un servidor de desarrollo</em>.</p>
+      <p class="muted" style="margin-top:16px">Por eso insistimos desde la clase 3 en mover el estado a la base. <em class="hl">Este es el momento en que esa decisión se cobra.</em></p>
     </section>
 
   </main>
