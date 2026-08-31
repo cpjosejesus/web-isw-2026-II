@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Paso 3 - Gunicorn y WSGI</title>
+<title>Paso 4 - TLS y cabeceras</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -267,7 +267,7 @@
 <body>
 <div class="deck">
   <aside class="spine" id="spine">
-    <div class="spine-title">Peldano 3</div>
+    <div class="spine-title">Peldano 4</div>
     <div class="layer" data-l="estatico">Estático</div>
     <div class="layer" data-l="proxy">Proxy inverso</div>
     <div class="layer" data-l="gunicorn">Gunicorn</div>
@@ -279,103 +279,90 @@
 
   <main class="stage" id="stage">
 
-    <!-- 17 · peldaño 3 -->
-    <section class="slide" data-layer="gunicorn">
-      <div class="eyebrow">Bloque 3 · Peldaño 3</div>
-      <h2>Ese aviso que ignoramos cuatro clases</h2>
-<pre class="sm"><span class="c">WARNING: This is a development server.
-Do not use it in a production deployment.
-Use a production WSGI server instead.</span></pre>
-      <p class="lead">No es una formalidad. El servidor de <code class="inline">flask run</code> es un solo proceso, sin límites, sin reinicio ante fallos, pensado para que veas tu cambio al guardar.</p>
-      <p class="muted">Hoy le hacemos caso.</p>
-    </section>
-
-    <!-- 18 · qué es WSGI -->
-    <section class="slide" data-layer="gunicorn">
-      <div class="eyebrow">Bloque 3 · El contrato</div>
-      <h2>WSGI: el enchufe entre el servidor y tu código</h2>
+    <!-- 23 · peldaño 4 -->
+    <section class="slide" data-layer="tls">
+      <div class="eyebrow">Bloque 4 · Peldaño 4</div>
+      <h2>Todo lo que enviamos viaja en texto plano</h2>
       <div class="flow">
-        <span class="n fill">Nginx</span><span class="a">HTTP →</span>
-        <span class="n">Gunicorn</span><span class="a">WSGI →</span>
-        <span class="n plum">app de Flask</span>
+        <span class="n plum">POST /libros/crear</span><span class="a">→ cualquiera en la red lo lee →</span>
+        <span class="n plum">título, autor, cookie de sesión</span>
       </div>
-      <p>Flask no sabe hablar HTTP crudo con el mundo. Sabe cumplir un <strong>contrato de Python</strong>: recibir un diccionario con la petición y devolver una respuesta.</p>
+      <p class="lead">La cookie de sesión que firmamos en la clase 4 viaja en cada petición. Sin TLS, robarla es <strong>escuchar</strong>.</p>
+      <p>HTTPS es HTTP dentro de un túnel cifrado. Y ese túnel lo termina nginx, no Flask.</p>
+    </section>
+
+    <!-- 24 · terminación TLS -->
+    <section class="slide" data-layer="tls">
+      <div class="eyebrow">Bloque 4 · El modelo</div>
+      <h2>Terminación TLS: el cifrado se abre en el borde</h2>
+      <div class="flow">
+        <span class="n">Navegador</span><span class="a">— HTTPS cifrado →</span>
+        <span class="n fill">Nginx</span><span class="a">— HTTP en red interna →</span>
+        <span class="n plum">Gunicorn</span>
+      </div>
+      <p>Nginx guarda el certificado y la clave privada, descifra, y reenvía en claro por una red que <strong>solo existe dentro de compose</strong>.</p>
       <div class="card accent">
-        <p style="margin:0">Gunicorn es quien traduce: abre sockets, parsea HTTP, y llama a tu <code class="inline">app</code> como una función. Por eso podés cambiar de servidor <em class="hl">sin tocar una línea de Flask</em>.</p>
+        <p style="margin:0">Ventaja concreta: el certificado se renueva y se configura <em class="hl">en un solo lugar</em>, aunque haya veinte réplicas de la aplicación detrás.</p>
       </div>
     </section>
 
-    <!-- 19 · tres piezas -->
-    <section class="slide" data-layer="gunicorn">
-      <div class="eyebrow">Bloque 3 · Los tres roles</div>
-      <h2>Quién hace qué, ahora que son tres</h2>
-      <div class="stack" style="max-width:720px">
-        <div class="s"><b>PostgreSQL</b><span>guarda las filas</span></div>
-        <div class="s"><b>Flask</b><span>decide qué responder — tu dominio</span></div>
-        <div class="s"><b>Gunicorn</b><span>ejecuta Python en varios procesos, los reinicia si mueren</span></div>
-        <div class="s hi"><b>Nginx</b><span>habla con internet: conexiones, archivos, TLS</span></div>
-      </div>
-      <p style="margin-top:20px">Cada pieza resuelve <em class="hl">un problema distinto</em>. Confundirlos es el origen de casi todo el dolor de despliegue.</p>
+    <!-- 25 · config tls -->
+    <section class="slide" data-layer="tls">
+      <div class="eyebrow">Bloque 4 · Configuración</div>
+      <h2>Dos <code class="inline" style="font-size:.68em">server</code>: uno redirige, otro atiende</h2>
+<pre><span class="k">server</span> {
+    listen 80;
+    server_name biblioteca.ucb.edu.bo;
+    return <span class="n">301</span> https://$host$request_uri;   <span class="c"># nadie se queda en http</span>
+}
+
+<span class="k">server</span> {
+    listen 443 ssl;
+    server_name biblioteca.ucb.edu.bo;
+
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    <span class="k">location</span> / { proxy_pass http://web:8000; <span class="c">/* + las 4 cabeceras */</span> }
+}</pre>
+      <p class="muted">El <code class="inline">301</code> es permanente: el navegador lo recuerda y la próxima vez ni intenta por HTTP.</p>
     </section>
 
-    <!-- 20 · gunicorn config -->
-    <section class="slide" data-layer="gunicorn">
-      <div class="eyebrow">Bloque 3 · Configuración</div>
-      <h2>Cómo se levanta Gunicorn</h2>
-<pre>gunicorn --workers <span class="n">4</span> \
-         --bind <span class="s">0.0.0.0:8000</span> \
-         --timeout <span class="n">30</span> \
-         --access-logfile - \
-         main:app                     <span class="c"># módulo : objeto Flask</span></pre>
-      <table style="margin-top:6px">
-        <tr><th>Opción</th><th>Qué hace</th></tr>
-        <tr><td class="mono">--workers</td><td>Procesos que atienden en paralelo. Regla inicial: <code class="inline">2 × núcleos + 1</code></td></tr>
-        <tr><td class="mono">--bind 0.0.0.0</td><td>Escucha en todas las interfaces del contenedor, para que nginx llegue</td></tr>
-        <tr><td class="mono">--timeout</td><td>Mata al worker que se cuelga más de 30 s y lo reemplaza</td></tr>
-      </table>
-    </section>
-
-    <!-- 21 · dockerfile -->
-    <section class="slide" data-layer="gunicorn">
-      <div class="eyebrow">Bloque 3 · En la biblioteca</div>
-      <h2>El Dockerfile cambia una línea</h2>
-<pre>FROM python:3.13-slim
-WORKDIR /app
-COPY pyproject.toml uv.lock ./
-RUN pip install uv && uv sync --frozen
-COPY . .
-
-<span class="c"># antes:</span>
-<span class="c"># CMD ["flask", "run", "--host=0.0.0.0", "--port=8000"]</span>
-
-CMD [<span class="s">"gunicorn"</span>, <span class="s">"--workers"</span>, <span class="s">"4"</span>, <span class="s">"--bind"</span>, <span class="s">"0.0.0.0:8000"</span>, <span class="s">"main:app"</span>]</pre>
-      <p class="muted">Nada más se mueve: ni las rutas, ni los modelos, ni las plantillas. El contrato WSGI hace que el cambio sea <em class="hl">de una línea</em>.</p>
-    </section>
-
-    <!-- 22 · workers y estado -->
-    <section class="slide" data-layer="gunicorn">
-      <div class="eyebrow">Bloque 3 · La consecuencia</div>
-      <h2>Cuatro workers son cuatro memorias distintas</h2>
-      <p class="lead">Cada worker es un <strong>proceso separado</strong>. No comparten variables. La petición siguiente puede caer en otro worker.</p>
+    <!-- 26 · certificados -->
+    <section class="slide" data-layer="tls">
+      <div class="eyebrow">Bloque 4 · De dónde sale el certificado</div>
+      <h2>Autofirmado para aprender, Let's Encrypt para publicar</h2>
       <div class="grid2">
-        <div class="card warn">
-          <h3>Deja de funcionar</h3>
-          <ul class="bullets" style="margin-top:6px">
-            <li>Un contador en una variable global</li>
-            <li>Una lista en memoria como «base de datos»</li>
-            <li>Un archivo subido guardado en el disco del contenedor</li>
-          </ul>
+        <div class="card">
+          <h3>En su máquina</h3>
+<pre class="sm" style="margin:8px 0 0">openssl req -x509 -newkey rsa:2048 \
+  -keyout privkey.pem -out fullchain.pem \
+  -days 365 -nodes \
+  -subj "/CN=localhost"</pre>
+          <p class="muted" style="margin:10px 0 0;font-size:.92em">El navegador va a advertir. Es correcto: nadie lo avala.</p>
         </div>
         <div class="card accent">
-          <h3>Sigue funcionando</h3>
-          <ul class="bullets" style="margin-top:6px">
-            <li>Todo lo que está en <strong>PostgreSQL</strong></li>
-            <li>La sesión de Flask, firmada en una cookie</li>
-            <li>Lo que se recalcula en cada petición</li>
-          </ul>
+          <h3>En un dominio real</h3>
+          <p style="margin:0" class="muted">Certbot pide el certificado a Let's Encrypt, que verifica que el dominio es suyo sirviendo un archivo bajo <code class="inline">/.well-known/</code>. Gratis y automático, cada 90 días.</p>
         </div>
       </div>
-      <p class="muted" style="margin-top:16px">Por eso insistimos desde la clase 3 en mover el estado a la base. <em class="hl">Este es el momento en que esa decisión se cobra.</em></p>
+      <p class="muted" style="margin-top:16px">Un certificado no dice que el sitio sea bueno. Solo dice que <em class="hl">el dominio es de quien dice ser</em>.</p>
+    </section>
+
+    <!-- 27 · cabeceras y límites -->
+    <section class="slide" data-layer="tls">
+      <div class="eyebrow">Bloque 4 · El borde</div>
+      <h2>Cosas que se resuelven una vez, para todo el sitio</h2>
+<pre>add_header Strict-Transport-Security <span class="s">"max-age=31536000"</span> always;
+add_header X-Content-Type-Options    <span class="s">"nosniff"</span> always;
+add_header X-Frame-Options           <span class="s">"SAMEORIGIN"</span> always;
+
+client_max_body_size <span class="n">5m</span>;        <span class="c"># nadie sube un archivo de 2 GB</span>
+
+gzip on;                        <span class="c"># HTML y CSS viajan comprimidos</span>
+gzip_types text/css application/json application/javascript;</pre>
+      <p class="muted">Ninguna de estas líneas es lógica de la biblioteca. Todas protegen o aceleran <strong>cualquier</strong> sitio — y por eso viven en nginx y no en <code class="inline">main.py</code>.</p>
     </section>
 
   </main>
