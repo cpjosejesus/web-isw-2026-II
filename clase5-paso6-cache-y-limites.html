@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Paso 5 - Balanceo de carga</title>
+<title>Paso 6 - Cache y limites</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -267,7 +267,7 @@
 <body>
 <div class="deck">
   <aside class="spine" id="spine">
-    <div class="spine-title">Peldano 5</div>
+    <div class="spine-title">Peldano 6</div>
     <div class="layer" data-l="estatico">Estático</div>
     <div class="layer" data-l="proxy">Proxy inverso</div>
     <div class="layer" data-l="gunicorn">Gunicorn</div>
@@ -279,95 +279,160 @@
 
   <main class="stage" id="stage">
 
-    <!-- 28 · peldaño 5 -->
-    <section class="slide" data-layer="balanceo">
-      <div class="eyebrow">Bloque 5 · Peldaño 5</div>
-      <h2>Un contenedor sigue siendo un solo punto de falla</h2>
-      <p class="lead">Gunicorn nos dio cuatro workers, pero todos dentro del mismo contenedor. Si ese contenedor se cae o hay que actualizarlo, el sitio se cae.</p>
+    <!-- 34 · peldaño 6 -->
+    <section class="slide" data-layer="cache">
+      <div class="eyebrow">Bloque 6 · Peldaño 6</div>
+      <h2>La petición más rápida es la que nunca llega a Flask</h2>
+      <p class="lead">El catálogo de libros cambia pocas veces al día, pero lo recalculamos en cada visita: consulta a PostgreSQL, objetos, plantilla, HTML. Mil visitas, mil veces el mismo trabajo.</p>
       <div class="flow">
-        <span class="n fill">Nginx</span><span class="a">→</span>
-        <span class="n plum">web_1</span>
-        <span class="n plum">web_2</span>
-        <span class="n plum">web_3</span>
+        <span class="n">Navegador</span><span class="a">→</span>
+        <span class="n fill">Nginx (¿lo tengo?)</span><span class="a">sí →</span>
+        <span class="n">respuesta guardada</span>
       </div>
-      <p>La respuesta es la misma idea de siempre, un nivel más arriba: <em class="hl">varias copias, alguien que reparte</em>.</p>
+      <p class="muted">Nginx puede guardar la respuesta de Flask y devolverla él mismo durante unos segundos.</p>
     </section>
 
-    <!-- 29 · upstream -->
-    <section class="slide" data-layer="balanceo">
-      <div class="eyebrow">Bloque 5 · Configuración</div>
-      <h2>Un grupo de servidores con nombre</h2>
-<pre><span class="k">upstream</span> <span class="n">biblioteca</span> {
-    server web_1:8000;
-    server web_2:8000;
-    server web_3:8000;
-}
+    <!-- 35 · config cache -->
+    <section class="slide" data-layer="cache">
+      <div class="eyebrow">Bloque 6 · Configuración</div>
+      <h2>Caché de respuestas</h2>
+<pre>proxy_cache_path /var/cache/nginx keys_zone=<span class="n">biblio</span>:10m max_size=<span class="n">200m</span>;
 
-<span class="k">server</span> {
-    listen 443 ssl;
-    <span class="k">location</span> / {
-        proxy_pass http://<span class="n">biblioteca</span>;      <span class="c"># ya no un host: un grupo</span>
-    }
+<span class="k">location</span> /libros {
+    proxy_pass http://biblioteca;
+
+    proxy_cache <span class="n">biblio</span>;
+    proxy_cache_valid <span class="n">200</span> <span class="n">30s</span>;                 <span class="c"># 30 s de vida</span>
+    proxy_cache_methods GET HEAD;               <span class="c"># jamás POST</span>
+    proxy_cache_use_stale error timeout;        <span class="c"># si Flask cae, sirvo lo viejo</span>
+
+    add_header X-Cache-Status $upstream_cache_status;   <span class="c"># HIT / MISS</span>
 }</pre>
-      <p class="muted">Cambió <strong>una palabra</strong> en <code class="inline">proxy_pass</code>. Todo lo anterior — TLS, cabeceras, estáticos — sigue igual. Así se ve una arquitectura que crece bien.</p>
+      <p class="muted">Esa última línea es de oro para depurar: en las DevTools ven <code class="inline">HIT</code> o <code class="inline">MISS</code> en cada respuesta.</p>
     </section>
 
-    <!-- 30 · estrategias -->
-    <section class="slide" data-layer="balanceo">
-      <div class="eyebrow">Bloque 5 · Cómo reparte</div>
-      <h2>Tres formas de elegir a quién le toca</h2>
+    <!-- 36 · qué se puede cachear -->
+    <section class="slide" data-layer="cache">
+      <div class="eyebrow">Bloque 6 · El criterio</div>
+      <h2>Qué se puede cachear y qué nunca</h2>
+      <div class="grid2">
+        <div class="card accent">
+          <h3>Sí</h3>
+          <ul class="bullets" style="margin-top:6px">
+            <li>El catálogo público de libros</li>
+            <li>La ficha de un libro</li>
+            <li>CSS, imágenes, tipografías</li>
+          </ul>
+        </div>
+        <div class="card warn">
+          <h3>No</h3>
+          <ul class="bullets" style="margin-top:6px">
+            <li>Cualquier <code class="inline">POST</code>, <code class="inline">PUT</code> o <code class="inline">DELETE</code></li>
+            <li>Páginas que dependen de <strong>quién</strong> está mirando</li>
+            <li>Todo lo que lleve datos de sesión</li>
+          </ul>
+        </div>
+      </div>
+      <p style="margin-top:18px">La pregunta es siempre la misma: <em class="hl">¿dos usuarios distintos verían exactamente lo mismo?</em> Si la respuesta es no, no se cachea.</p>
+    </section>
+
+    <!-- 37 · rate limiting -->
+    <section class="slide" data-layer="cache">
+      <div class="eyebrow">Bloque 6 · Límites</div>
+      <h2>Un cliente no puede consumir todo el servidor</h2>
+<pre>limit_req_zone $binary_remote_addr zone=<span class="n">general</span>:10m rate=<span class="n">10r/s</span>;
+
+<span class="k">location</span> /libros/crear {
+    limit_req zone=<span class="n">general</span> burst=<span class="n">20</span> nodelay;
+    proxy_pass http://biblioteca;
+}</pre>
+      <p>Diez peticiones por segundo por IP, con tolerancia a ráfagas de veinte. La número veintiuno recibe <code class="inline">503</code> y <strong>nunca llega a Flask</strong>.</p>
+      <div class="card accent">
+        <p style="margin:0">Defender la aplicación en el borde es más barato que defenderla adentro: el trabajo se rechaza <em class="hl">antes</em> de abrir una conexión a PostgreSQL.</p>
+      </div>
+    </section>
+
+    <!-- 38 · la escalera completa -->
+    <section class="slide" data-layer="cache">
+      <div class="eyebrow">Síntesis</div>
+      <h2>La escalera completa</h2>
       <table>
-        <tr><th>Estrategia</th><th>Directiva</th><th>Cuándo</th></tr>
-        <tr><td><strong>Round-robin</strong></td><td class="mono">(por defecto)</td><td>Uno a cada uno, por turno. Sirve casi siempre.</td></tr>
-        <tr><td><strong>Menos conexiones</strong></td><td class="mono">least_conn;</td><td>Cuando las peticiones duran muy distinto entre sí.</td></tr>
-        <tr><td><strong>Por IP</strong></td><td class="mono">ip_hash;</td><td>Cuando el mismo cliente <strong>debe</strong> caer siempre en el mismo servidor.</td></tr>
+        <tr><th>#</th><th>Peldaño</th><th>Qué resuelve</th></tr>
+        <tr><td class="num">1</td><td>Servir estáticos</td><td>Archivos sin pasar por Python</td></tr>
+        <tr><td class="num">2</td><td>Proxy inverso</td><td>Un solo puerto público; la app escondida</td></tr>
+        <tr><td class="num">3</td><td>Gunicorn</td><td>Varios procesos, reinicio ante fallos</td></tr>
+        <tr><td class="num">4</td><td>TLS y cabeceras</td><td>Cifrado y protecciones en un solo lugar</td></tr>
+        <tr><td class="num">5</td><td>Balanceo</td><td>Réplicas, tolerancia a fallos, despliegue sin caída</td></tr>
+        <tr class="key"><td class="num">6</td><td><strong>Caché y límites</strong></td><td><strong>Trabajo que nunca se ejecuta</strong></td></tr>
       </table>
-      <div class="card warn" style="margin-top:16px">
-        <p style="margin:0">Si necesitan <code class="inline">ip_hash</code> para que la aplicación funcione, es señal de que hay <em class="hl">estado en la memoria del proceso</em>. La solución de fondo no es el balanceador: es mover ese estado a PostgreSQL.</p>
+      <p class="muted" style="margin-top:16px">Ningún peldaño rompió al anterior. Cada uno agregó una capacidad y dejó el resto en su lugar.</p>
+    </section>
+
+    <!-- 39 · depurar -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Síntesis · Práctica</div>
+      <h2>Cuando algo falla, tres comandos</h2>
+<pre>docker compose exec nginx nginx -t          <span class="c"># ¿la sintaxis es válida?</span>
+docker compose exec nginx nginx -s reload   <span class="c"># recargar sin cortar conexiones</span>
+docker compose logs -f nginx                <span class="c"># ver qué está llegando</span></pre>
+      <p><code class="inline">nginx -t</code> <strong>siempre</strong> antes de recargar: una configuración rota deja el sitio caído. El <code class="inline">reload</code> levanta procesos nuevos y deja terminar a los viejos.</p>
+      <div class="card accent">
+        <p style="margin:0">Para saber de quién es la culpa: si el error es <code class="inline">502 Bad Gateway</code>, nginx está bien y <strong>no pudo hablar con Gunicorn</strong>. Si es <code class="inline">500</code>, la excepción es de su código.</p>
       </div>
     </section>
 
-    <!-- 31 · pesos y salud -->
-    <section class="slide" data-layer="balanceo">
-      <div class="eyebrow">Bloque 5 · Tolerancia a fallos</div>
-      <h2>Qué pasa cuando una réplica se cae</h2>
-<pre><span class="k">upstream</span> biblioteca {
-    least_conn;
-    server web_1:8000 weight=<span class="n">2</span>;                    <span class="c"># máquina más grande</span>
-    server web_2:8000;
-    server web_3:8000 max_fails=<span class="n">3</span> fail_timeout=<span class="n">30s</span>;  <span class="c"># 3 fallos → 30 s afuera</span>
-    server web_4:8000 backup;                       <span class="c"># solo si caen las demás</span>
-}</pre>
-      <p>Nginx marca la réplica caída y <strong>deja de mandarle tráfico</strong>. Pasado el <code class="inline">fail_timeout</code>, prueba de nuevo con una petición.</p>
-      <p class="muted">El usuario no ve un error: ve la respuesta de otra réplica. Eso es <em class="hl">alta disponibilidad</em>, y son cuatro líneas de configuración.</p>
+    <!-- 40 · errores frecuentes -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Síntesis</div>
+      <h2>Los seis errores de esta semana</h2>
+      <table>
+        <tr><th>Síntoma</th><th>Causa</th></tr>
+        <tr><td class="mono">502 Bad Gateway</td><td>Gunicorn escucha en <code class="inline">127.0.0.1</code>, no en <code class="inline">0.0.0.0</code></td></tr>
+        <tr><td class="mono">404 en el CSS</td><td>Confundir <code class="inline">root</code> con <code class="inline">alias</code> en <code class="inline">/static/</code></td></tr>
+        <tr><td class="mono">Enlaces a http://</td><td>Faltan las cabeceras <code class="inline">X-Forwarded-*</code> o <code class="inline">ProxyFix</code></td></tr>
+        <tr><td class="mono">Sesión que se pierde</td><td>Estado en memoria del proceso con varios workers</td></tr>
+        <tr><td class="mono">413 al subir</td><td><code class="inline">client_max_body_size</code> por defecto: 1 MB</td></tr>
+        <tr class="key"><td class="mono">Cambios que no se ven</td><td>Editaron el <code class="inline">.conf</code> y no recargaron nginx</td></tr>
+      </table>
     </section>
 
-    <!-- 32 · escalar en compose -->
-    <section class="slide" data-layer="balanceo">
-      <div class="eyebrow">Bloque 5 · En la biblioteca</div>
-      <h2>Tres réplicas sin escribir tres servicios</h2>
-<pre>docker compose up -d --scale web=<span class="n">3</span></pre>
-<pre><span class="k">upstream</span> biblioteca {
-    server <span class="s">web</span>:8000;        <span class="c"># compose resuelve "web" a las 3 IPs</span>
-}</pre>
-      <p>El DNS interno de compose devuelve las direcciones de las tres réplicas bajo el mismo nombre. Nginx reparte entre ellas sin saber cuántas hay.</p>
-      <div class="card amber">
-        <p style="margin:0">Ojo: nginx resuelve el nombre <strong>al arrancar</strong>. Si escalan con nginx ya levantado, hay que recargarlo — <code class="inline">docker compose restart nginx</code>. En producción esto se resuelve con un <code class="inline">resolver</code> y variables.</p>
-      </div>
+    <!-- 41 · la tarea -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Práctica · Sobre La Carta</div>
+      <h2>Lo que deben agregar a su entrega</h2>
+      <ul class="bullets">
+        <li>Un servicio <code class="inline">nginx</code> en el compose; que sea <strong>el único con puerto publicado</strong></li>
+        <li><code class="inline">/static/</code> servido por nginx, el resto por proxy a la aplicación</li>
+        <li>Gunicorn en el <code class="inline">CMD</code> del Dockerfile, con al menos dos workers</li>
+        <li>Las cuatro cabeceras de proxy y <code class="inline">ProxyFix</code> del lado de Flask</li>
+        <li>Levantar con <code class="inline">--scale web=2</code> y demostrar que <strong>sigue funcionando</strong></li>
+      </ul>
+      <p class="muted" style="margin-top:8px">Se evalúa lo mismo de siempre: que <code class="inline">docker compose up</code> alcance, y que cada pieza esté donde le corresponde.</p>
     </section>
 
-    <!-- 33 · despliegue sin caída -->
-    <section class="slide" data-layer="balanceo">
-      <div class="eyebrow">Bloque 5 · La recompensa</div>
-      <h2>Actualizar sin que el sitio se caiga</h2>
+    <!-- 42 · lo que viene -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">La próxima clase</div>
+      <h2>El problema que dejamos pendiente</h2>
+      <p class="lead">Seguimos sin poder cambiar el esquema sin borrar la base. <code class="inline">db.create_all()</code> no crea columnas nuevas en tablas que ya existen.</p>
       <div class="flow">
-        <span class="n">baja web_1</span><span class="a">→</span>
-        <span class="n">nginx la saca</span><span class="a">→</span>
-        <span class="n">sube nueva</span><span class="a">→</span>
-        <span class="n fill">repetir con web_2</span>
+        <span class="n">db.create_all()</span><span class="a">no alcanza →</span>
+        <span class="n">migraciones</span>
       </div>
-      <p class="lead">Mientras una réplica se actualiza, las otras dos atienden. El usuario no percibe nada.</p>
-      <p>Es la razón práctica por la que se replica: no es solo aguantar más carga, es poder <em class="hl">tocar el sistema mientras está vivo</em>.</p>
+      <p class="muted">La próxima clase: <strong>Flask-Migrate y Alembic</strong> — versionar el esquema como versionamos el código. Ahora con más razón: con tres réplicas corriendo, no se puede «borrar y volver a crear».</p>
+    </section>
+
+    <!-- 43 · cierre -->
+    <section class="slide" data-layer="">
+      <div class="eyebrow">Cierre</div>
+      <h2>La idea de hoy en una línea</h2>
+      <div class="stack">
+        <div class="s"><b>PostgreSQL</b><span>guarda el estado</span></div>
+        <div class="s"><b>Flask</b><span>decide qué responder</span></div>
+        <div class="s"><b>Gunicorn</b><span>lo ejecuta muchas veces a la vez</span></div>
+        <div class="s hi"><b>Nginx</b><span>habla con el mundo: archivos, TLS, réplicas, caché</span></div>
+      </div>
+      <p style="margin-top:20px">Escalar no fue reescribir la aplicación. Fue <em class="hl">poner las piezas correctas alrededor</em> de una aplicación que ya hacía bien su única tarea.</p>
     </section>
 
   </main>
